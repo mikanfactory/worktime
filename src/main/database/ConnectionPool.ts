@@ -8,12 +8,20 @@ export interface DatabaseConnection {
   lastUsed: number
 }
 
+interface PendingRequest {
+  resolve: (connection: DatabaseConnection) => void
+  reject: (error: Error) => void
+  timeoutHandle: NodeJS.Timeout
+}
+
 export class ConnectionPool {
   private connections: DatabaseConnection[] = []
+  private waitQueue: PendingRequest[] = []
   private readonly dbPath: string
   private readonly maxConnections: number
   private readonly connectionTimeout: number
   private cleanupInterval: NodeJS.Timeout | null = null
+  private readonly waitTimeout = 10000
 
   constructor(maxConnections = 5, connectionTimeout = 30000) {
     this.dbPath = path.join(app.getPath('userData'), 'beaver_log.db')
@@ -50,16 +58,13 @@ export class ConnectionPool {
   }
 
   async getConnection(): Promise<DatabaseConnection> {
-    // Try to find an available connection
     const availableConnection = this.connections.find((conn) => !conn.inUse)
-
     if (availableConnection) {
       availableConnection.inUse = true
       availableConnection.lastUsed = Date.now()
       return availableConnection
     }
 
-    // Create new connection if under limit
     if (this.connections.length < this.maxConnections) {
       try {
         const db = await this.createConnection()
@@ -75,59 +80,78 @@ export class ConnectionPool {
       }
     }
 
-    // Wait for an available connection
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Connection pool timeout: no available connections'))
-      }, 10000) // 10 second timeout
-
-      const checkForConnection = () => {
-        const availableConn = this.connections.find((conn) => !conn.inUse)
-        if (availableConn) {
-          clearTimeout(timeout)
-          availableConn.inUse = true
-          availableConn.lastUsed = Date.now()
-          resolve(availableConn)
-        } else {
-          setTimeout(checkForConnection, 100) // Check every 100ms
-        }
+      const request: PendingRequest = {
+        resolve: (connection) => {
+          clearTimeout(request.timeoutHandle)
+          resolve(connection)
+        },
+        reject: (error) => {
+          clearTimeout(request.timeoutHandle)
+          reject(error)
+        },
+        timeoutHandle: setTimeout(() => {
+          this.waitQueue = this.waitQueue.filter((queuedRequest) => queuedRequest !== request)
+          reject(new Error('Connection pool timeout: no available connections'))
+        }, this.waitTimeout)
       }
 
-      checkForConnection()
+      this.waitQueue.push(request)
     })
   }
 
   releaseConnection(connection: DatabaseConnection): void {
+    const nextRequest = this.waitQueue.shift()
+    if (nextRequest) {
+      connection.inUse = true
+      connection.lastUsed = Date.now()
+      nextRequest.resolve(connection)
+      return
+    }
+
     connection.inUse = false
     connection.lastUsed = Date.now()
   }
 
-  async executeQuery<T = any>(query: string, params: any[] = []): Promise<T[]> {
-    console.log('ConnectionPool: executeQuery called with query:', query, 'params:', params)
+  async executeQuery<T = unknown>(query: string, params: unknown[] = []): Promise<T[]> {
     const connection = await this.getConnection()
-    console.log('ConnectionPool: Got connection, executing query...')
 
     try {
       return new Promise((resolve, reject) => {
         connection.db.all(query, params, (err, rows) => {
           if (err) {
-            console.error('ConnectionPool: Query error:', err)
             reject(err)
             return
           }
-          console.log('ConnectionPool: Query successful, rows:', rows?.length || 0)
           resolve(rows as T[])
         })
       })
     } finally {
       this.releaseConnection(connection)
-      console.log('ConnectionPool: Connection released')
+    }
+  }
+
+  async executeGet<T = unknown>(query: string, params: unknown[] = []): Promise<T | undefined> {
+    const connection = await this.getConnection()
+
+    try {
+      return new Promise((resolve, reject) => {
+        connection.db.get(query, params, (err, row) => {
+          if (err) {
+            reject(err)
+            return
+          }
+          resolve(row as T | undefined)
+        })
+      })
+    } finally {
+      this.releaseConnection(connection)
     }
   }
 
   async executeRun(
     query: string,
-    params: any[] = []
+    params: unknown[] = []
   ): Promise<{ lastID: number; changes: number }> {
     const connection = await this.getConnection()
 
@@ -197,6 +221,12 @@ export class ConnectionPool {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval)
       this.cleanupInterval = null
+    }
+
+    const remainingRequests = [...this.waitQueue]
+    this.waitQueue = []
+    for (const request of remainingRequests) {
+      request.reject(new Error('Connection pool closed'))
     }
 
     const closePromises = this.connections.map(
