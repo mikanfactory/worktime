@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Button } from './ui/button'
 
 interface AttendancePanelProps {
@@ -7,43 +7,62 @@ interface AttendancePanelProps {
 }
 
 export function AttendancePanel({ onLogAttendance, isLoading }: AttendancePanelProps) {
-    const [elapsedTime, setElapsedTime] = useState(0)
-    const [firstClockInTime, setFirstClockInTime] = useState<Date | null>(null)
-    const [hasClocked, setHasClocked] = useState(false)
+    const [isRunning, setIsRunning] = useState(false)
+    const [accumulatedSeconds, setAccumulatedSeconds] = useState(0)
+    const [lastStartTime, setLastStartTime] = useState<Date | null>(null)
+    const [displayTime, setDisplayTime] = useState(0)
+    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-    useEffect(() => {
-        // Load today's first clock-in time
-        const loadFirstClockIn = async () => {
-            const result = await window.api.getTodayFirstClockIn()
-            if (result.success && result.timestamp) {
-                setFirstClockInTime(new Date(result.timestamp))
-                setHasClocked(true)
+    const loadStatus = useCallback(async () => {
+        const result = await window.api.getTodayClockStatus()
+        if (result.success && result.status) {
+            const { isRunning: running, accumulatedSeconds: accumulated, lastTimestamp } = result.status
+            setIsRunning(running)
+            setAccumulatedSeconds(accumulated)
+
+            if (running && lastTimestamp) {
+                const start = new Date(lastTimestamp)
+                setLastStartTime(start)
+                // Calculate display time immediately
+                const currentElapsed = Math.floor((Date.now() - start.getTime()) / 1000)
+                setDisplayTime(accumulated + currentElapsed)
+            } else {
+                setLastStartTime(null)
+                setDisplayTime(accumulated)
             }
         }
-        loadFirstClockIn()
     }, [])
 
+    // Load status on mount
     useEffect(() => {
-        const timer = setInterval(() => {
-            if (firstClockInTime) {
-                const now = new Date()
-                const diff = Math.floor((now.getTime() - firstClockInTime.getTime()) / 1000)
-                setElapsedTime(diff)
-            }
-        }, 1000)
+        loadStatus()
+    }, [loadStatus])
 
-        return () => clearInterval(timer)
-    }, [firstClockInTime])
+    // Timer effect
+    useEffect(() => {
+        if (timerRef.current) {
+            clearInterval(timerRef.current)
+            timerRef.current = null
+        }
+
+        if (isRunning && lastStartTime) {
+            timerRef.current = setInterval(() => {
+                const currentElapsed = Math.floor((Date.now() - lastStartTime.getTime()) / 1000)
+                setDisplayTime(accumulatedSeconds + currentElapsed)
+            }, 1000)
+        }
+
+        return () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current)
+                timerRef.current = null
+            }
+        }
+    }, [isRunning, lastStartTime, accumulatedSeconds])
 
     const handleClockInOut = async () => {
         await onLogAttendance('打刻')
-
-        // If this is the first clock-in of the day, set the start time
-        if (!firstClockInTime) {
-            const now = new Date()
-            setFirstClockInTime(now)
-        }
-        setHasClocked(true)
+        await loadStatus()
     }
 
     const formatElapsedTime = (seconds: number) => {
@@ -57,13 +76,13 @@ export function AttendancePanel({ onLogAttendance, isLoading }: AttendancePanelP
         <div className="flex flex-col items-center justify-center h-full min-h-screen bg-white">
             <div className="text-center space-y-12">
                 <div className="text-8xl font-bold text-navy-900" style={{ color: '#1a1a4d' }}>
-                    {formatElapsedTime(elapsedTime)}
+                    {formatElapsedTime(displayTime)}
                 </div>
                 <Button
                     size="lg"
                     className="h-20 px-16 text-2xl rounded-3xl"
                     style={{
-                        backgroundColor: hasClocked ? '#e57373' : '#90c695',
+                        backgroundColor: isRunning ? '#e57373' : '#90c695',
                         color: 'white',
                         fontSize: '1.5rem',
                         fontWeight: '500'

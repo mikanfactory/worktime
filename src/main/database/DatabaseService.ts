@@ -60,6 +60,24 @@ export class DatabaseService {
     }
   }
 
+  async getTodayAttendanceLogs(): Promise<AttendanceLog[]> {
+    if (!this.initialized) {
+      await this.initialize()
+    }
+
+    try {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      return await this.connectionPool.executeQuery<AttendanceLog>(
+        "SELECT * FROM attendance_logs WHERE type = '打刻' AND timestamp >= ? ORDER BY timestamp ASC",
+        [today.toISOString()]
+      )
+    } catch (error) {
+      console.error('Error getting today attendance logs:', error)
+      throw error
+    }
+  }
+
   async getAttendanceLogs(limit = 100, offset = 0): Promise<AttendanceLog[]> {
     if (!this.initialized) {
       await this.initialize()
