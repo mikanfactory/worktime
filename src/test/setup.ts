@@ -13,7 +13,11 @@ Object.defineProperty(window, 'api', {
     getPrompt: vi.fn(),
     getTranslationLogs: vi.fn(),
     searchWord: vi.fn(),
-    getWordSearchLogs: vi.fn()
+    getWordSearchLogs: vi.fn(),
+    getTodayClockStatus: vi.fn().mockResolvedValue({
+      success: true,
+      status: { isRunning: false, accumulatedSeconds: 0, lastTimestamp: null }
+    })
   },
   writable: true
 })

@@ -35,6 +35,7 @@ export class IpcHandlerService {
       }
       return await this.attendanceService.getTodaySummary(validated.data)
     })
+
   }
 
   private validateLogRequest(payload: unknown): Result<AttendanceLogRequest> {
