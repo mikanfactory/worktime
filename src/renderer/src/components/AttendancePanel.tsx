@@ -6,7 +6,6 @@ interface AttendancePanelProps {
   summary: AttendanceSummary
   onLogAttendance: () => Promise<boolean>
   onRefreshSummary: () => Promise<void>
-  isLoading: boolean
   error?: string | null
 }
 
@@ -14,7 +13,6 @@ export function AttendancePanel({
   summary,
   onLogAttendance,
   onRefreshSummary,
-  isLoading,
   error
 }: AttendancePanelProps) {
   const [elapsedSeconds, setElapsedSeconds] = useState(summary.workedSeconds)
@@ -28,7 +26,7 @@ export function AttendancePanel({
   }, [summary.workedSeconds])
 
   useEffect(() => {
-    if (!summary.firstClockIn) {
+    if (!summary.isWorking) {
       return
     }
 
@@ -37,18 +35,16 @@ export function AttendancePanel({
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [summary.firstClockIn])
-
-  const hasClockedInToday = Boolean(summary.firstClockIn)
+  }, [summary.isWorking])
 
   const buttonStyle = useMemo(
     () => ({
-      backgroundColor: hasClockedInToday ? '#e57373' : '#90c695',
+      backgroundColor: summary.isWorking ? '#e57373' : '#90c695',
       color: 'white',
       fontSize: '1.5rem',
       fontWeight: '500'
     }),
-    [hasClockedInToday]
+    [summary.isWorking]
   )
 
   const handleClockIn = async () => {
@@ -70,9 +66,9 @@ export function AttendancePanel({
           className="h-20 px-16 text-2xl rounded-3xl"
           style={buttonStyle}
           onClick={handleClockIn}
-          disabled={isLoading}
+          disabled={false}
         >
-          打刻
+          {summary.isWorking ? '退勤' : '出勤'}
         </Button>
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
       </div>

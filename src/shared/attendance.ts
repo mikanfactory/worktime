@@ -30,6 +30,7 @@ export interface AttendanceSummary {
   firstClockIn?: string
   latestEvent?: string
   workedSeconds: number
+  isWorking: boolean
 }
 
 export interface AttendanceLogRequest {

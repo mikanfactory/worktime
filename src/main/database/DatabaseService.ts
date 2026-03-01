@@ -276,13 +276,39 @@ export class DatabaseService {
       [dayStartIso, dayEndIso]
     )
 
+    const events = await this.connectionPool.executeQuery<{ event_type: string; timestamp: string }>(
+      `SELECT event_type, timestamp
+         FROM attendance_logs
+        WHERE timestamp >= ?
+          AND timestamp < ?
+          AND event_type IN ('clock_in', 'clock_out')
+        ORDER BY timestamp ASC, id ASC`,
+      [dayStartIso, dayEndIso]
+    )
+
+    let workedSeconds = 0
+    let currentClockInTime: number | null = null
+
+    for (const event of events) {
+      if (event.event_type === 'clock_in' && currentClockInTime === null) {
+        currentClockInTime = new Date(event.timestamp).getTime()
+      } else if (event.event_type === 'clock_out' && currentClockInTime !== null) {
+        workedSeconds += Math.floor((new Date(event.timestamp).getTime() - currentClockInTime) / 1000)
+        currentClockInTime = null
+      }
+    }
+
+    const isWorking = currentClockInTime !== null
+    if (currentClockInTime !== null) {
+      workedSeconds += Math.floor((Date.now() - currentClockInTime) / 1000)
+    }
+
     const firstClockInIso = firstClockIn?.first_clock_in
     return {
       firstClockIn: firstClockInIso || undefined,
       latestEvent: latestEvent?.latest_event || undefined,
-      workedSeconds: firstClockInIso
-        ? Math.max(0, Math.floor((Date.now() - new Date(firstClockInIso).getTime()) / 1000))
-        : 0
+      workedSeconds: Math.max(0, workedSeconds),
+      isWorking
     }
   }
 

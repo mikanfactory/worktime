@@ -27,9 +27,8 @@ export default function AttendanceApp() {
           {activeTab === 'attendance' ? (
             <AttendancePanel
               summary={attendance.summary}
-              onLogAttendance={() => attendance.logAttendance('clock_in')}
+              onLogAttendance={() => attendance.logAttendance(attendance.summary.isWorking ? 'clock_out' : 'clock_in')}
               onRefreshSummary={attendance.loadTodaySummary}
-              isLoading={attendance.isLoading}
               error={attendance.error}
             />
           ) : activeTab === 'attendance-history' ? (
