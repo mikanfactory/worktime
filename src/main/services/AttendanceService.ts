@@ -53,4 +53,41 @@ export class AttendanceService {
             }
         }
     }
+
+    async getTodayClockStatus(): Promise<{
+        success: boolean
+        status?: { isRunning: boolean; accumulatedSeconds: number; lastTimestamp: string | null }
+        error?: string
+    }> {
+        try {
+            const logs = await databaseService.getTodayAttendanceLogs()
+
+            let accumulatedSeconds = 0
+
+            // Calculate accumulated time from completed pairs (1-2, 3-4, ...)
+            for (let i = 0; i + 1 < logs.length; i += 2) {
+                const start = new Date(logs[i].timestamp).getTime()
+                const end = new Date(logs[i + 1].timestamp).getTime()
+                accumulatedSeconds += (end - start) / 1000
+            }
+
+            const isRunning = logs.length % 2 === 1
+            const lastTimestamp = logs.length > 0 ? logs[logs.length - 1].timestamp : null
+
+            return {
+                success: true,
+                status: {
+                    isRunning,
+                    accumulatedSeconds: Math.floor(accumulatedSeconds),
+                    lastTimestamp
+                }
+            }
+        } catch (error) {
+            console.error('Error getting today clock status:', error)
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            }
+        }
+    }
 }

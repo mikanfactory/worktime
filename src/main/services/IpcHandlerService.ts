@@ -20,5 +20,9 @@ export class IpcHandlerService {
     ipcMain.handle('attendance:getTodayFirstClockIn', async () => {
       return await this.attendanceService.getTodayFirstClockIn()
     })
+
+    ipcMain.handle('attendance:getTodayClockStatus', async () => {
+      return await this.attendanceService.getTodayClockStatus()
+    })
   }
 }
