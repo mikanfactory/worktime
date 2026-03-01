@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, dialog } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { initializeDatabase, databaseService } from './database/db'
 import { AttendanceService } from './services/AttendanceService'
@@ -14,12 +14,16 @@ const windowManagerService = new WindowManagerService()
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
-  // Initialize the database
   try {
     await initializeDatabase()
-    console.log('Database initialized successfully')
   } catch (error) {
     console.error('Failed to initialize database:', error)
+    dialog.showErrorBox(
+      'Database initialization failed',
+      `アプリの初期化に失敗しました。\n${error instanceof Error ? error.message : String(error)}`
+    )
+    app.quit()
+    return
   }
 
   // Set app user model id for windows
@@ -57,7 +61,7 @@ app.on('window-all-closed', () => {
 })
 
 // Cleanup resources on app quit
-app.on('before-quit', async () => {
+  app.on('before-quit', async () => {
   try {
     await databaseService.close()
     console.log('Database connections closed successfully')
