@@ -14,6 +14,9 @@ BeaverLog is an Electron-based attendance management application. It features a 
 - `npm run typecheck` - Run TypeScript type checking for both Node and web targets
 - `npm run lint` - Run ESLint with cache
 - `npm run format` - Format code with Prettier
+- `npm test` - Run tests with vitest (watch mode)
+- `npm run test:run` - Run tests once
+- `npm run test:coverage` - Run tests with coverage report
 
 ### Building
 
@@ -21,6 +24,12 @@ BeaverLog is an Electron-based attendance management application. It features a 
 - `npm run build:mac` - Build macOS app
 - `npm run build:win` - Build Windows app
 - `npm run build:linux` - Build Linux app
+
+### Database (Prisma)
+
+- `npm run db:generate` - Generate Prisma client
+- `npm run db:migrate:dev` - Create/apply dev migrations
+- `npm run db:studio` - Open Prisma Studio GUI
 
 ### Testing & Linting
 
@@ -37,7 +46,7 @@ BeaverLog is an Electron-based attendance management application. It features a 
 
 ### Key Components
 
-- **Database Layer** (`src/main/database/`): SQLite database with migration system for translation history storage
+- **Database Layer** (`src/db/`): Prisma-based SQLite database with migration system for translation history storage (`schema.prisma`, `client.ts`, `service.ts`, `migrate.ts`)
 - **API Integration**: OpenAI GPT-4o-mini integration with encrypted API key storage using Electron's safeStorage
 - **UI Components**: Modern component architecture using Radix UI primitives and Tailwind CSS
 
