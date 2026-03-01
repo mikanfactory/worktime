@@ -1,79 +1,88 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button } from './ui/button'
+import type { AttendanceSummary } from '../../../shared/attendance'
 
 interface AttendancePanelProps {
-    onLogAttendance: (type: string, note?: string) => Promise<void>
-    isLoading: boolean
+  summary: AttendanceSummary
+  onLogAttendance: () => Promise<boolean>
+  onRefreshSummary: () => Promise<void>
+  isLoading: boolean
+  error?: string | null
 }
 
-export function AttendancePanel({ onLogAttendance, isLoading }: AttendancePanelProps) {
-    const [elapsedTime, setElapsedTime] = useState(0)
-    const [firstClockInTime, setFirstClockInTime] = useState<Date | null>(null)
-    const [hasClocked, setHasClocked] = useState(false)
+export function AttendancePanel({
+  summary,
+  onLogAttendance,
+  onRefreshSummary,
+  isLoading,
+  error
+}: AttendancePanelProps) {
+  const [elapsedSeconds, setElapsedSeconds] = useState(summary.workedSeconds)
 
-    useEffect(() => {
-        // Load today's first clock-in time
-        const loadFirstClockIn = async () => {
-            const result = await window.api.getTodayFirstClockIn()
-            if (result.success && result.timestamp) {
-                setFirstClockInTime(new Date(result.timestamp))
-                setHasClocked(true)
-            }
-        }
-        loadFirstClockIn()
-    }, [])
+  useEffect(() => {
+    void onRefreshSummary()
+  }, [onRefreshSummary])
 
-    useEffect(() => {
-        const timer = setInterval(() => {
-            if (firstClockInTime) {
-                const now = new Date()
-                const diff = Math.floor((now.getTime() - firstClockInTime.getTime()) / 1000)
-                setElapsedTime(diff)
-            }
-        }, 1000)
+  useEffect(() => {
+    setElapsedSeconds(summary.workedSeconds)
+  }, [summary.workedSeconds])
 
-        return () => clearInterval(timer)
-    }, [firstClockInTime])
-
-    const handleClockInOut = async () => {
-        await onLogAttendance('打刻')
-
-        // If this is the first clock-in of the day, set the start time
-        if (!firstClockInTime) {
-            const now = new Date()
-            setFirstClockInTime(now)
-        }
-        setHasClocked(true)
+  useEffect(() => {
+    if (!summary.firstClockIn) {
+      return
     }
 
-    const formatElapsedTime = (seconds: number) => {
-        const hours = Math.floor(seconds / 3600)
-        const minutes = Math.floor((seconds % 3600) / 60)
-        const secs = seconds % 60
-        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
-    }
+    const timer = setInterval(() => {
+      setElapsedSeconds((current) => current + 1)
+    }, 1000)
 
-    return (
-        <div className="flex flex-col items-center justify-center h-full min-h-screen bg-white">
-            <div className="text-center space-y-12">
-                <div className="text-8xl font-bold text-navy-900" style={{ color: '#1a1a4d' }}>
-                    {formatElapsedTime(elapsedTime)}
-                </div>
-                <Button
-                    size="lg"
-                    className="h-20 px-16 text-2xl rounded-3xl"
-                    style={{
-                        backgroundColor: hasClocked ? '#e57373' : '#90c695',
-                        color: 'white',
-                        fontSize: '1.5rem',
-                        fontWeight: '500'
-                    }}
-                    onClick={handleClockInOut}
-                    disabled={isLoading}
-                >
-                    打刻
-                </Button>
-            </div>
+    return () => clearInterval(timer)
+  }, [summary.firstClockIn])
+
+  const hasClockedInToday = Boolean(summary.firstClockIn)
+
+  const buttonStyle = useMemo(
+    () => ({
+      backgroundColor: hasClockedInToday ? '#e57373' : '#90c695',
+      color: 'white',
+      fontSize: '1.5rem',
+      fontWeight: '500'
+    }),
+    [hasClockedInToday]
+  )
+
+  const handleClockIn = async () => {
+    const success = await onLogAttendance()
+    if (!success) {
+      return
+    }
+    await onRefreshSummary()
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full min-h-screen bg-white">
+      <div className="text-center space-y-8">
+        <div className="text-8xl font-bold text-navy-900" style={{ color: '#1a1a4d' }}>
+          {formatElapsedTime(elapsedSeconds)}
         </div>
-    )
+        <Button
+          size="lg"
+          className="h-20 px-16 text-2xl rounded-3xl"
+          style={buttonStyle}
+          onClick={handleClockIn}
+          disabled={isLoading}
+        >
+          打刻
+        </Button>
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      </div>
+    </div>
+  )
+}
+
+function formatElapsedTime(seconds: number): string {
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const secs = seconds % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
 }

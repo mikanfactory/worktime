@@ -1,50 +1,96 @@
-import { useState, useCallback } from 'react'
-import { AttendanceLog } from '../types'
+import { useCallback, useState } from 'react'
+import type {
+  AttendanceEventType,
+  AttendanceLog,
+  AttendanceSummary,
+  GetAttendanceLogsRequest
+} from '../../../shared/attendance'
+
+type AttendanceStatus = 'idle' | 'loading' | 'success' | 'error'
 
 export function useAttendance() {
-    const [logs, setLogs] = useState<AttendanceLog[]>([])
-    const [isLoading, setIsLoading] = useState(false)
-    const [error, setError] = useState<string | null>(null)
+  const [logs, setLogs] = useState<AttendanceLog[]>([])
+  const [summary, setSummary] = useState<AttendanceSummary>({
+    workedSeconds: 0
+  })
+  const [nextCursor, setNextCursor] = useState<string | undefined>(undefined)
+  const [status, setStatus] = useState<AttendanceStatus>('idle')
+  const [error, setError] = useState<string | null>(null)
 
-    const loadLogs = useCallback(async () => {
-        setIsLoading(true)
-        setError(null)
-        try {
-            const result = await window.api.getAttendanceLogs()
-            if (result.success && result.logs) {
-                setLogs(result.logs)
-            } else {
-                setError(result.error || 'Failed to load logs')
-            }
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Unknown error')
-        } finally {
-            setIsLoading(false)
-        }
-    }, [])
+  const loadLogs = useCallback(async (request: GetAttendanceLogsRequest = {}) => {
+    setStatus('loading')
+    setError(null)
 
-    const logAttendance = async (type: string, note?: string) => {
-        setIsLoading(true)
-        setError(null)
-        try {
-            const result = await window.api.logAttendance(type, note)
-            if (!result.success) {
-                setError(result.error || 'Failed to log attendance')
-            } else {
-                // Refresh logs if needed, or just let the user go to history tab
-            }
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Unknown error')
-        } finally {
-            setIsLoading(false)
-        }
+    try {
+      const result = await window.api.getAttendanceLogs(request)
+      if (result.ok) {
+        setLogs(result.data.logs)
+        setNextCursor(result.data.nextCursor)
+        setStatus('success')
+        return
+      }
+
+      setStatus('error')
+      setError(result.message)
+    } catch (err) {
+      setStatus('error')
+      setError(err instanceof Error ? err.message : 'Unknown error')
     }
+  }, [])
 
-    return {
-        logs,
-        isLoading,
-        error,
-        loadLogs,
-        logAttendance
+  const loadTodaySummary = useCallback(async () => {
+    setStatus('loading')
+    setError(null)
+
+    try {
+      const result = await window.api.getTodaySummary()
+      if (result.ok) {
+        setSummary(result.data)
+        setStatus('success')
+        return
+      }
+
+      setStatus('error')
+      setError(result.message)
+    } catch (err) {
+      setStatus('error')
+      setError(err instanceof Error ? err.message : 'Unknown error')
     }
+  }, [])
+
+  const logAttendance = useCallback(async (eventType: AttendanceEventType, note?: string) => {
+    setStatus('loading')
+    setError(null)
+
+    try {
+      const result = await window.api.logAttendance({
+        eventType,
+        note
+      })
+      if (result.ok) {
+        setStatus('success')
+        return true
+      }
+
+      setStatus('error')
+      setError(result.message)
+      return false
+    } catch (err) {
+      setStatus('error')
+      setError(err instanceof Error ? err.message : 'Unknown error')
+      return false
+    }
+  }, [])
+
+  return {
+    logs,
+    summary,
+    nextCursor,
+    status,
+    isLoading: status === 'loading',
+    error,
+    loadLogs,
+    loadTodaySummary,
+    logAttendance
+  }
 }

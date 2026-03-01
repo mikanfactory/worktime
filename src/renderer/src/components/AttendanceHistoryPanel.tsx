@@ -1,4 +1,4 @@
-import { AttendanceLog } from '../types'
+import type { AttendanceEventType, AttendanceLog } from '../../../shared/attendance'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { ScrollArea } from './ui/scroll-area'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table'
@@ -42,7 +42,9 @@ export function AttendanceHistoryPanel({ logs, isLoading }: AttendanceHistoryPan
                                         logs.map((log) => (
                                             <TableRow key={log.id}>
                                                 <TableCell>{new Date(log.timestamp).toLocaleString()}</TableCell>
-                                                <TableCell className="font-medium">{log.type}</TableCell>
+                                                <TableCell className="font-medium">
+                                                    {formatEventType(log.eventType)}
+                                                </TableCell>
                                                 <TableCell>{log.note || '-'}</TableCell>
                                             </TableRow>
                                         ))
@@ -55,4 +57,18 @@ export function AttendanceHistoryPanel({ logs, isLoading }: AttendanceHistoryPan
             </Card>
         </div>
     )
+}
+
+function formatEventType(eventType: AttendanceEventType): string {
+    switch (eventType) {
+        case 'clock_out':
+            return '退勤'
+        case 'break_start':
+            return '休憩開始'
+        case 'break_end':
+            return '休憩終了'
+        case 'clock_in':
+        default:
+            return '打刻'
+    }
 }
