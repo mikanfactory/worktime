@@ -1,0 +1,22 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "darwin-arm64", "darwin", "windows", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model AttendanceLog {
+  id        Int      @id @default(autoincrement())
+  eventType String   @map("event_type")
+  type      String?
+  timestamp String
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([timestamp(sort: Desc)], map: "idx_attendance_logs_timestamp")
+  @@index([eventType, timestamp(sort: Desc)], map: "idx_attendance_logs_event_type_timestamp")
+  @@map("attendance_logs")
+}
