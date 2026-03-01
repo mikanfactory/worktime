@@ -16,7 +16,11 @@ export class WindowManagerService {
       ...(process.platform === 'linux' ? { icon } : {}),
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
-        sandbox: false
+        // `@electron-toolkit/preload` を利用するため sandbox は無効化する
+        sandbox: false,
+        contextIsolation: true,
+        nodeIntegration: false,
+        webSecurity: true
       }
     })
 

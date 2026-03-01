@@ -12,10 +12,9 @@ export default function AttendanceApp() {
   const [activeTab, setActiveTab] = useState<TabType>('attendance')
   const attendance = useAttendance()
 
-  // Load attendance history when attendance history tab is selected
   useEffect(() => {
     if (activeTab === 'attendance-history') {
-      attendance.loadLogs()
+      void attendance.loadLogs({ limit: 50 })
     }
   }, [activeTab, attendance.loadLogs])
 
@@ -27,8 +26,10 @@ export default function AttendanceApp() {
         <main className="flex-1 overflow-hidden">
           {activeTab === 'attendance' ? (
             <AttendancePanel
-              onLogAttendance={attendance.logAttendance}
-              isLoading={attendance.isLoading}
+              summary={attendance.summary}
+              onLogAttendance={() => attendance.logAttendance(attendance.summary.isWorking ? 'clock_out' : 'clock_in')}
+              onRefreshSummary={attendance.loadTodaySummary}
+              error={attendance.error}
             />
           ) : activeTab === 'attendance-history' ? (
             <AttendanceHistoryPanel
