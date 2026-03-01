@@ -2,13 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { WordSearchService } from '../WordSearchService'
 import { ApiKeyService } from '../ApiKeyService'
 
+const mockCreateCompletion = vi.fn()
+
 // Mock OpenAI
 vi.mock('openai', () => {
   return {
     default: vi.fn().mockImplementation(() => ({
       chat: {
         completions: {
-          create: vi.fn()
+          create: mockCreateCompletion
         }
       }
     }))
@@ -23,9 +25,8 @@ vi.mock('import.meta.env', () => ({
 describe('WordSearchService', () => {
   let wordSearchService: WordSearchService
   let mockApiKeyService: ApiKeyService
-  let mockOpenAI: any
 
-  beforeEach(async () => {
+  beforeEach(() => {
     // Reset all mocks
     vi.clearAllMocks()
 
@@ -36,10 +37,6 @@ describe('WordSearchService', () => {
     } as any
 
     wordSearchService = new WordSearchService(mockApiKeyService)
-
-    // Get reference to the mocked OpenAI instance
-    const OpenAI = vi.mocked(await import('openai')).default
-    mockOpenAI = new OpenAI()
   })
 
   describe('searchWord', () => {
@@ -72,7 +69,7 @@ describe('WordSearchService', () => {
         apiKey: 'saved-api-key'
       })
 
-      mockOpenAI.chat.completions.create.mockResolvedValue(mockApiResponse)
+      mockCreateCompletion.mockResolvedValue(mockApiResponse)
 
       // Act
       const result = await wordSearchService.searchWord(japaneseWord)
@@ -83,7 +80,7 @@ describe('WordSearchService', () => {
       expect(result.results![0].englishWord).toBe('cat')
       expect(result.results![0].meaning).toBe('猫科の動物')
       expect(result.results![0].examples).toHaveLength(2)
-      expect(mockOpenAI.chat.completions.create).toHaveBeenCalledWith({
+      expect(mockCreateCompletion).toHaveBeenCalledWith({
         model: 'gpt-4o-mini',
         messages: [
           {
@@ -114,7 +111,7 @@ describe('WordSearchService', () => {
         apiKey: 'test-key'
       })
 
-      mockOpenAI.chat.completions.create.mockResolvedValue(mockApiResponse)
+      mockCreateCompletion.mockResolvedValue(mockApiResponse)
 
       // Act
       const result = await wordSearchService.searchWord(japaneseWord)
@@ -161,7 +158,7 @@ describe('WordSearchService', () => {
         apiKey: 'test-key'
       })
 
-      mockOpenAI.chat.completions.create.mockResolvedValue(mockApiResponse)
+      mockCreateCompletion.mockResolvedValue(mockApiResponse)
 
       // Act
       const result = await wordSearchService.searchWord('テスト')
@@ -188,7 +185,7 @@ describe('WordSearchService', () => {
         apiKey: 'test-key'
       })
 
-      mockOpenAI.chat.completions.create.mockResolvedValue(mockApiResponse)
+      mockCreateCompletion.mockResolvedValue(mockApiResponse)
 
       // Act
       const result = await wordSearchService.searchWord('テスト')
@@ -218,7 +215,7 @@ describe('WordSearchService', () => {
         apiKey: 'test-key'
       })
 
-      mockOpenAI.chat.completions.create.mockResolvedValue(mockApiResponse)
+      mockCreateCompletion.mockResolvedValue(mockApiResponse)
 
       // Act
       const result = await wordSearchService.searchWord('テスト')
@@ -235,7 +232,7 @@ describe('WordSearchService', () => {
         apiKey: 'test-key'
       })
 
-      mockOpenAI.chat.completions.create.mockRejectedValue(new Error('API Error'))
+      mockCreateCompletion.mockRejectedValue(new Error('API Error'))
 
       // Act
       const result = await wordSearchService.searchWord('テスト')
