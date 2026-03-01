@@ -6,7 +6,8 @@ const api = {
   logAttendance: (type: string, note?: string) => ipcRenderer.invoke('attendance:log', type, note),
   getAttendanceLogs: (limit?: number, offset?: number) =>
     ipcRenderer.invoke('attendance:getLogs', limit, offset),
-  getTodayFirstClockIn: () => ipcRenderer.invoke('attendance:getTodayFirstClockIn')
+  getTodayFirstClockIn: () => ipcRenderer.invoke('attendance:getTodayFirstClockIn'),
+  getTodayClockStatus: () => ipcRenderer.invoke('attendance:getTodayClockStatus')
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

@@ -27,6 +27,15 @@ declare global {
         timestamp?: string
         error?: string
       }>
+      getTodayClockStatus: () => Promise<{
+        success: boolean
+        status?: {
+          isRunning: boolean
+          accumulatedSeconds: number
+          lastTimestamp: string | null
+        }
+        error?: string
+      }>
     }
   }
 }
