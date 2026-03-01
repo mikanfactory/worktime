@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+
+# OS
+.DS_Store
+
+# Environment
+.env
+.env.*
+
+# Editor
+*.swp
+*.swo
+*~
+
+# ESLint cache
+.eslintcache
