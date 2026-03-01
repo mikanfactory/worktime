@@ -32,3 +32,29 @@ $ npm run build:mac
 # For Linux
 $ npm run build:linux
 ```
+
+### Database
+
+```bash
+# Generate Prisma client
+$ npm run db:generate
+
+# Create/apply dev migrations
+$ npm run db:migrate:dev
+
+# Open Prisma Studio GUI
+$ npm run db:studio
+```
+
+### Testing
+
+```bash
+# Run tests (watch mode)
+$ npm test
+
+# Run tests once
+$ npm run test:run
+
+# Run tests with coverage report
+$ npm run test:coverage
+```

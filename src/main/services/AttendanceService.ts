@@ -1,4 +1,4 @@
-import { databaseService } from '../database/DatabaseService'
+import * as db from '../../db/service'
 import {
   type AttendanceLogRequest,
   type AttendanceLogsPage,
@@ -13,7 +13,7 @@ export class AttendanceService {
     try {
       const timestamp = request.occurredAt ?? new Date().toISOString()
       const normalizedNote = request.note?.trim() || undefined
-      const id = await databaseService.saveAttendanceLog(request.eventType, timestamp, normalizedNote)
+      const id = await db.saveAttendanceLog(request.eventType, timestamp, normalizedNote)
       return { ok: true, data: { id } }
     } catch (error) {
       console.error('Error logging attendance:', error)
@@ -27,7 +27,7 @@ export class AttendanceService {
 
   async getLogs(request: GetAttendanceLogsRequest = {}): Promise<Result<AttendanceLogsPage>> {
     try {
-      const logsPage = await databaseService.getAttendanceLogs(request)
+      const logsPage = await db.getAttendanceLogs(request)
       return { ok: true, data: logsPage }
     } catch (error) {
       console.error('Error getting attendance logs:', error)
@@ -43,7 +43,7 @@ export class AttendanceService {
     try {
       const baseDate = request.date ? new Date(request.date) : new Date()
       const { startIso, endIso } = this.getDayRange(baseDate)
-      const summary = await databaseService.getTodaySummary(startIso, endIso)
+      const summary = await db.getTodaySummary(startIso, endIso)
       return { ok: true, data: summary }
     } catch (error) {
       console.error("Error getting today's summary:", error)

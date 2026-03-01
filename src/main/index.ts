@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
-import { initializeDatabase, databaseService } from './database/db'
+import { initializeDatabase, closeDatabase } from '../db'
 import { AttendanceService } from './services/AttendanceService'
 import { IpcHandlerService } from './services/IpcHandlerService'
 import { WindowManagerService } from './services/WindowManagerService'
@@ -63,7 +63,7 @@ app.on('window-all-closed', () => {
 // Cleanup resources on app quit
   app.on('before-quit', async () => {
   try {
-    await databaseService.close()
+    await closeDatabase()
     console.log('Database connections closed successfully')
   } catch (error) {
     console.error('Error closing database connections:', error)

@@ -17,5 +17,9 @@ out/
 *.swo
 *~
 
+# Database
+dev.db
+dev.db-journal
+
 # ESLint cache
 .eslintcache
