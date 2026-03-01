@@ -91,7 +91,11 @@ export class IpcHandlerService {
       return this.validationError('cursor must be a string')
     }
 
-    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 200)) {
+    if (limit !== undefined && limit !== null && typeof limit !== 'number') {
+      return this.validationError('limit must be a number')
+    }
+
+    if (typeof limit === 'number' && (!Number.isInteger(limit) || limit < 1 || limit > 200)) {
       return this.validationError('limit must be an integer between 1 and 200')
     }
 
