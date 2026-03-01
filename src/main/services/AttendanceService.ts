@@ -1,56 +1,65 @@
-import { databaseService, AttendanceLog } from '../database/DatabaseService'
+import { databaseService } from '../database/DatabaseService'
+import {
+  type AttendanceLogRequest,
+  type AttendanceLogsPage,
+  type AttendanceSummary,
+  type GetAttendanceLogsRequest,
+  type GetTodaySummaryRequest,
+  type Result
+} from '../../shared/attendance'
 
 export class AttendanceService {
-    async logAttendance(type: string, note?: string): Promise<{ success: boolean; id?: number; error?: string }> {
-        try {
-            const timestamp = new Date().toISOString()
-            const id = await databaseService.saveAttendanceLog(type, timestamp, note)
-            return { success: true, id }
-        } catch (error) {
-            console.error('Error logging attendance:', error)
-            return {
-                success: false,
-                error: error instanceof Error ? error.message : 'Unknown error'
-            }
-        }
+  async logAttendance(request: AttendanceLogRequest): Promise<Result<{ id: number }>> {
+    try {
+      const timestamp = request.occurredAt ?? new Date().toISOString()
+      const normalizedNote = request.note?.trim() || undefined
+      const id = await databaseService.saveAttendanceLog(request.eventType, timestamp, normalizedNote)
+      return { ok: true, data: { id } }
+    } catch (error) {
+      console.error('Error logging attendance:', error)
+      return {
+        ok: false,
+        code: 'DB_ERROR',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
     }
+  }
 
-    async getLogs(limit = 100, offset = 0): Promise<{ success: boolean; logs?: AttendanceLog[]; error?: string }> {
-        try {
-            const logs = await databaseService.getAttendanceLogs(limit, offset)
-            return { success: true, logs }
-        } catch (error) {
-            console.error('Error getting attendance logs:', error)
-            return {
-                success: false,
-                error: error instanceof Error ? error.message : 'Unknown error'
-            }
-        }
+  async getLogs(request: GetAttendanceLogsRequest = {}): Promise<Result<AttendanceLogsPage>> {
+    try {
+      const logsPage = await databaseService.getAttendanceLogs(request)
+      return { ok: true, data: logsPage }
+    } catch (error) {
+      console.error('Error getting attendance logs:', error)
+      return {
+        ok: false,
+        code: 'DB_ERROR',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
     }
+  }
 
-    async getTodayFirstClockIn(): Promise<{ success: boolean; timestamp?: string; error?: string }> {
-        try {
-            const today = new Date()
-            today.setHours(0, 0, 0, 0)
-
-            const logs = await databaseService.getAttendanceLogs(1000, 0)
-            const todayLogs = logs.filter(log => {
-                const logDate = new Date(log.timestamp)
-                return logDate >= today
-            })
-
-            if (todayLogs.length > 0) {
-                // Return the first log's timestamp
-                return { success: true, timestamp: todayLogs[0].timestamp }
-            }
-
-            return { success: true, timestamp: undefined }
-        } catch (error) {
-            console.error('Error getting today\'s first clock-in:', error)
-            return {
-                success: false,
-                error: error instanceof Error ? error.message : 'Unknown error'
-            }
-        }
+  async getTodaySummary(request: GetTodaySummaryRequest = {}): Promise<Result<AttendanceSummary>> {
+    try {
+      const baseDate = request.date ? new Date(request.date) : new Date()
+      const { startIso, endIso } = this.getDayRange(baseDate)
+      const summary = await databaseService.getTodaySummary(startIso, endIso)
+      return { ok: true, data: summary }
+    } catch (error) {
+      console.error("Error getting today's summary:", error)
+      return {
+        ok: false,
+        code: 'DB_ERROR',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
     }
+  }
+
+  private getDayRange(baseDate: Date): { startIso: string; endIso: string } {
+    const start = new Date(baseDate)
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(start)
+    end.setDate(end.getDate() + 1)
+    return { startIso: start.toISOString(), endIso: end.toISOString() }
+  }
 }

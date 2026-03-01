@@ -1,12 +1,18 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import type {
+  AttendanceLogRequest,
+  GetAttendanceLogsRequest,
+  GetTodaySummaryRequest
+} from '../shared/attendance'
 
 // Custom APIs for renderer
 const api = {
-  logAttendance: (type: string, note?: string) => ipcRenderer.invoke('attendance:log', type, note),
-  getAttendanceLogs: (limit?: number, offset?: number) =>
-    ipcRenderer.invoke('attendance:getLogs', limit, offset),
-  getTodayFirstClockIn: () => ipcRenderer.invoke('attendance:getTodayFirstClockIn')
+  logAttendance: (request: AttendanceLogRequest) => ipcRenderer.invoke('attendance:log', request),
+  getAttendanceLogs: (request?: GetAttendanceLogsRequest) =>
+    ipcRenderer.invoke('attendance:getLogs', request),
+  getTodaySummary: (request?: GetTodaySummaryRequest) =>
+    ipcRenderer.invoke('attendance:getTodaySummary', request)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
