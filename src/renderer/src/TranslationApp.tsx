@@ -5,6 +5,8 @@ import { Sidebar } from './components/Sidebar'
 import { Header } from './components/Header'
 import { AttendancePanel } from './components/AttendancePanel'
 import { AttendanceHistoryPanel } from './components/AttendanceHistoryPanel'
+import { DailySummaryPanel } from './components/DailySummaryPanel'
+import { MonthlySummaryPanel } from './components/MonthlySummaryPanel'
 import { useAttendance } from './hooks/useAttendance'
 import { TabType } from './types'
 
@@ -35,6 +37,31 @@ export default function AttendanceApp() {
             <AttendanceHistoryPanel
               logs={attendance.logs}
               isLoading={attendance.isLoading}
+              onUpdateLog={attendance.updateLog}
+              onDeleteLog={attendance.deleteLog}
+              onLogAttendance={async (eventType, occurredAt, note) => {
+                const api = window.api
+                if (!api) return false
+                const result = await api.logAttendance({ eventType, occurredAt, note })
+                if (result.ok) {
+                  await attendance.loadLogs({ limit: 50 })
+                  return true
+                }
+                return false
+              }}
+              onRefreshLogs={() => attendance.loadLogs({ limit: 50 })}
+            />
+          ) : activeTab === 'daily-summary' ? (
+            <DailySummaryPanel
+              dailySummaries={attendance.dailySummaries}
+              isLoading={attendance.isLoading}
+              onLoadSummaries={attendance.loadDailySummaries}
+            />
+          ) : activeTab === 'monthly-summary' ? (
+            <MonthlySummaryPanel
+              monthlySummary={attendance.monthlySummary}
+              isLoading={attendance.isLoading}
+              onLoadSummary={attendance.loadMonthlySummary}
             />
           ) : null}
         </main>

@@ -1,13 +1,19 @@
 import { useCallback, useRef, useState } from 'react'
 import type {
+  AttendanceLog,
   AttendanceLogRequest,
   AttendanceLogsPage,
   AttendanceEventType,
-  AttendanceLog,
   AttendanceSummary,
+  DailySummary,
+  DeleteAttendanceLogRequest,
   GetAttendanceLogsRequest,
+  GetDailySummariesRequest,
+  GetMonthlySummaryRequest,
   GetTodaySummaryRequest,
-  Result
+  MonthlySummary,
+  Result,
+  UpdateAttendanceLogRequest
 } from '../../../shared/attendance'
 
 type AttendanceStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -16,11 +22,17 @@ type AttendanceApi = {
   logAttendance: (request: AttendanceLogRequest) => Promise<Result<{ id: number }>>
   getAttendanceLogs: (request?: GetAttendanceLogsRequest) => Promise<Result<AttendanceLogsPage>>
   getTodaySummary: (request?: GetTodaySummaryRequest) => Promise<Result<AttendanceSummary>>
+  updateAttendanceLog: (request: UpdateAttendanceLogRequest) => Promise<Result<AttendanceLog>>
+  deleteAttendanceLog: (request: DeleteAttendanceLogRequest) => Promise<Result<void>>
+  getDailySummaries: (request: GetDailySummariesRequest) => Promise<Result<DailySummary[]>>
+  getMonthlySummary: (request: GetMonthlySummaryRequest) => Promise<Result<MonthlySummary>>
 }
 
 interface UseAttendanceResult {
   logs: AttendanceLog[]
   summary: AttendanceSummary
+  dailySummaries: DailySummary[]
+  monthlySummary: MonthlySummary | null
   nextCursor: string | undefined
   hasMoreLogs: boolean
   status: AttendanceStatus
@@ -33,6 +45,10 @@ interface UseAttendanceResult {
   loadMoreLogs: () => Promise<void>
   loadTodaySummary: () => Promise<void>
   logAttendance: (eventType: AttendanceEventType, note?: string) => Promise<boolean>
+  loadDailySummaries: (yearMonth: string) => Promise<void>
+  loadMonthlySummary: (yearMonth: string) => Promise<void>
+  updateLog: (request: UpdateAttendanceLogRequest) => Promise<boolean>
+  deleteLog: (id: number) => Promise<boolean>
 }
 
 function getAttendanceApi(): AttendanceApi | undefined {
@@ -55,7 +71,15 @@ function getAttendanceApi(): AttendanceApi | undefined {
     getAttendanceLogs: (request?: GetAttendanceLogsRequest) =>
       invoke('attendance:getLogs', request),
     getTodaySummary: (request?: GetTodaySummaryRequest) =>
-      invoke('attendance:getTodaySummary', request)
+      invoke('attendance:getTodaySummary', request),
+    updateAttendanceLog: (request: UpdateAttendanceLogRequest) =>
+      invoke('attendance:updateLog', request),
+    deleteAttendanceLog: (request: DeleteAttendanceLogRequest) =>
+      invoke('attendance:deleteLog', request),
+    getDailySummaries: (request: GetDailySummariesRequest) =>
+      invoke('attendance:getDailySummaries', request),
+    getMonthlySummary: (request: GetMonthlySummaryRequest) =>
+      invoke('attendance:getMonthlySummary', request)
   }
 }
 
@@ -65,6 +89,8 @@ export function useAttendance(): UseAttendanceResult {
     workedSeconds: 0,
     isWorking: false
   })
+  const [dailySummaries, setDailySummaries] = useState<DailySummary[]>([])
+  const [monthlySummary, setMonthlySummary] = useState<MonthlySummary | null>(null)
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined)
   const [isLogsLoading, setIsLogsLoading] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
@@ -210,9 +236,112 @@ export function useAttendance(): UseAttendanceResult {
     }
   }, [])
 
+  const loadDailySummaries = useCallback(async (yearMonth: string) => {
+    setStatus('loading')
+    setError(null)
+
+    const attendanceApi = getAttendanceApi()
+    if (!attendanceApi) {
+      setStatus('error')
+      setError('IPC bridge is not available')
+      return
+    }
+
+    try {
+      const result = await attendanceApi.getDailySummaries({ yearMonth })
+      if (result.ok) {
+        setDailySummaries(result.data)
+        setStatus('success')
+        return
+      }
+
+      setStatus('error')
+      setError(result.message)
+    } catch (err) {
+      setStatus('error')
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    }
+  }, [])
+
+  const loadMonthlySummary = useCallback(async (yearMonth: string) => {
+    setStatus('loading')
+    setError(null)
+
+    const attendanceApi = getAttendanceApi()
+    if (!attendanceApi) {
+      setStatus('error')
+      setError('IPC bridge is not available')
+      return
+    }
+
+    try {
+      const result = await attendanceApi.getMonthlySummary({ yearMonth })
+      if (result.ok) {
+        setMonthlySummary(result.data)
+        setStatus('success')
+        return
+      }
+
+      setStatus('error')
+      setError(result.message)
+    } catch (err) {
+      setStatus('error')
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    }
+  }, [])
+
+  const updateLog = useCallback(async (request: UpdateAttendanceLogRequest) => {
+    setError(null)
+
+    const attendanceApi = getAttendanceApi()
+    if (!attendanceApi) {
+      setError('IPC bridge is not available')
+      return false
+    }
+
+    try {
+      const result = await attendanceApi.updateAttendanceLog(request)
+      if (result.ok) {
+        return true
+      }
+
+      setError(result.message)
+      return false
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+      return false
+    }
+  }, [])
+
+  const deleteLog = useCallback(async (id: number) => {
+    setError(null)
+
+    const attendanceApi = getAttendanceApi()
+    if (!attendanceApi) {
+      setError('IPC bridge is not available')
+      return false
+    }
+
+    try {
+      const result = await attendanceApi.deleteAttendanceLog({ id })
+      if (result.ok) {
+        setLogs((prevLogs) => prevLogs.filter((log) => log.id !== id))
+        return true
+      }
+
+      setError(result.message)
+      return false
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+      return false
+    }
+  }, [])
+
   return {
     logs,
     summary,
+    dailySummaries,
+    monthlySummary,
     nextCursor,
     hasMoreLogs: Boolean(nextCursor),
     status,
@@ -224,6 +353,10 @@ export function useAttendance(): UseAttendanceResult {
     loadLogs,
     loadMoreLogs,
     loadTodaySummary,
-    logAttendance
+    logAttendance,
+    loadDailySummaries,
+    loadMonthlySummary,
+    updateLog,
+    deleteLog
   }
 }
