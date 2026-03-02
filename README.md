@@ -1,10 +1,14 @@
-# electron-app
+# BeaverLog
 
-An Electron application with React and TypeScript
+Electron ベースの勤怠管理アプリケーション。出勤・退勤の打刻と勤怠履歴の管理ができます。
 
-## Recommended IDE Setup
+## Tech Stack
 
-- [VSCode](https://code.visualstudio.com/) + [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) + [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
+- **Frontend**: React + TypeScript + Tailwind CSS
+- **Backend**: Electron (Main Process)
+- **Database**: SQLite (Prisma ORM)
+- **Build**: electron-vite
+- **UI**: Radix UI
 
 ## Project Setup
 

@@ -3,10 +3,16 @@ import { AttendanceService } from './AttendanceService'
 import {
   ATTENDANCE_EVENT_TYPES,
   type AttendanceLogRequest,
+  type DeleteAttendanceLogRequest,
   type GetAttendanceLogsRequest,
+  type GetDailySummariesRequest,
+  type GetMonthlySummaryRequest,
   type GetTodaySummaryRequest,
-  type Result
+  type Result,
+  type UpdateAttendanceLogRequest
 } from '../../shared/attendance'
+
+const YEAR_MONTH_PATTERN = /^\d{4}-\d{2}$/
 
 export class IpcHandlerService {
   constructor(private attendanceService: AttendanceService) {}
@@ -14,28 +20,45 @@ export class IpcHandlerService {
   registerHandlers(): void {
     ipcMain.handle('attendance:log', async (_, payload: unknown) => {
       const validated = this.validateLogRequest(payload)
-      if (!validated.ok) {
-        return validated
-      }
+      if (!validated.ok) return validated
       return await this.attendanceService.logAttendance(validated.data)
     })
 
     ipcMain.handle('attendance:getLogs', async (_, payload: unknown) => {
       const validated = this.validateGetLogsRequest(payload)
-      if (!validated.ok) {
-        return validated
-      }
+      if (!validated.ok) return validated
       return await this.attendanceService.getLogs(validated.data)
     })
 
     ipcMain.handle('attendance:getTodaySummary', async (_, payload: unknown) => {
       const validated = this.validateGetTodaySummaryRequest(payload)
-      if (!validated.ok) {
-        return validated
-      }
+      if (!validated.ok) return validated
       return await this.attendanceService.getTodaySummary(validated.data)
     })
 
+    ipcMain.handle('attendance:updateLog', async (_, payload: unknown) => {
+      const validated = this.validateUpdateLogRequest(payload)
+      if (!validated.ok) return validated
+      return await this.attendanceService.updateLog(validated.data)
+    })
+
+    ipcMain.handle('attendance:deleteLog', async (_, payload: unknown) => {
+      const validated = this.validateDeleteLogRequest(payload)
+      if (!validated.ok) return validated
+      return await this.attendanceService.deleteLog(validated.data)
+    })
+
+    ipcMain.handle('attendance:getDailySummaries', async (_, payload: unknown) => {
+      const validated = this.validateYearMonthRequest(payload, 'attendance:getDailySummaries')
+      if (!validated.ok) return validated
+      return await this.attendanceService.getDailySummaries(validated.data)
+    })
+
+    ipcMain.handle('attendance:getMonthlySummary', async (_, payload: unknown) => {
+      const validated = this.validateYearMonthRequest(payload, 'attendance:getMonthlySummary')
+      if (!validated.ok) return validated
+      return await this.attendanceService.getMonthlySummary(validated.data)
+    })
   }
 
   private validateLogRequest(payload: unknown): Result<AttendanceLogRequest> {
@@ -126,6 +149,75 @@ export class IpcHandlerService {
     }
 
     return { ok: true, data: { date: date as string | undefined } }
+  }
+
+  private validateUpdateLogRequest(payload: unknown): Result<UpdateAttendanceLogRequest> {
+    if (!this.isRecord(payload)) {
+      return this.validationError('attendance:updateLog payload must be an object')
+    }
+
+    const { id, eventType, timestamp, note } = payload
+
+    if (typeof id !== 'number' || !Number.isInteger(id) || id < 1) {
+      return this.validationError('id must be a positive integer')
+    }
+
+    if (
+      eventType !== undefined &&
+      (typeof eventType !== 'string' ||
+        !ATTENDANCE_EVENT_TYPES.includes(eventType as AttendanceLogRequest['eventType']))
+    ) {
+      return this.validationError(`eventType must be one of: ${ATTENDANCE_EVENT_TYPES.join(', ')}`)
+    }
+
+    if (timestamp !== undefined && !this.isIsoDateString(timestamp)) {
+      return this.validationError('timestamp must be a valid ISO8601 string')
+    }
+
+    if (note !== undefined && (typeof note !== 'string' || note.length > 1000)) {
+      return this.validationError('note must be a string with max length 1000')
+    }
+
+    return {
+      ok: true,
+      data: {
+        id: id as number,
+        eventType: eventType as UpdateAttendanceLogRequest['eventType'],
+        timestamp: timestamp as string | undefined,
+        note: note as string | undefined
+      }
+    }
+  }
+
+  private validateDeleteLogRequest(payload: unknown): Result<DeleteAttendanceLogRequest> {
+    if (!this.isRecord(payload)) {
+      return this.validationError('attendance:deleteLog payload must be an object')
+    }
+
+    const { id } = payload
+
+    if (typeof id !== 'number' || !Number.isInteger(id) || id < 1) {
+      return this.validationError('id must be a positive integer')
+    }
+
+    return { ok: true, data: { id: id as number } }
+  }
+
+  private validateYearMonthRequest(
+    payload: unknown,
+    channel: string
+  ): Result<GetDailySummariesRequest & GetMonthlySummaryRequest> {
+    if (!this.isRecord(payload)) {
+      return this.validationError(`${channel} payload must be an object`)
+    }
+
+    const { yearMonth } = payload
+
+    if (typeof yearMonth !== 'string' || !YEAR_MONTH_PATTERN.test(yearMonth)) {
+      return this.validationError('yearMonth must match YYYY-MM format')
+    }
+
+    return { ok: true, data: { yearMonth } }
   }
 
   private validationError(message: string): Result<never> {

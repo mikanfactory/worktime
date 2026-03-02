@@ -1,12 +1,29 @@
 import '@testing-library/jest-dom'
 
+// Mock ResizeObserver for Radix UI components
+global.ResizeObserver = vi.fn().mockImplementation(() => ({
+  observe: vi.fn(),
+  unobserve: vi.fn(),
+  disconnect: vi.fn()
+}))
+
 // Mock Electron APIs for testing (only in jsdom environment)
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'api', {
     value: {
-      logAttendance: vi.fn(),
-      getAttendanceLogs: vi.fn(),
-      getTodaySummary: vi.fn()
+      logAttendance: vi.fn().mockResolvedValue({ ok: true, data: { id: 1 } }),
+      getAttendanceLogs: vi.fn().mockResolvedValue({ ok: true, data: { logs: [], nextCursor: undefined } }),
+      getTodaySummary: vi.fn().mockResolvedValue({
+        ok: true,
+        data: { workedSeconds: 0, isWorking: false }
+      }),
+      updateAttendanceLog: vi.fn().mockResolvedValue({ ok: true, data: { id: 1 } }),
+      deleteAttendanceLog: vi.fn().mockResolvedValue({ ok: true, data: undefined }),
+      getDailySummaries: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+      getMonthlySummary: vi.fn().mockResolvedValue({
+        ok: true,
+        data: { yearMonth: '2026-03', totalWorkedSeconds: 0, workingDays: 0, dailySummaries: [] }
+      })
     },
     writable: true,
     configurable: true

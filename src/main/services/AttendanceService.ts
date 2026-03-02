@@ -1,11 +1,18 @@
 import * as db from '../../db/service'
 import {
+  type AttendanceLog,
   type AttendanceLogRequest,
   type AttendanceLogsPage,
   type AttendanceSummary,
+  type DailySummary,
+  type DeleteAttendanceLogRequest,
   type GetAttendanceLogsRequest,
+  type GetDailySummariesRequest,
+  type GetMonthlySummaryRequest,
   type GetTodaySummaryRequest,
-  type Result
+  type MonthlySummary,
+  type Result,
+  type UpdateAttendanceLogRequest
 } from '../../shared/attendance'
 
 export class AttendanceService {
@@ -47,6 +54,66 @@ export class AttendanceService {
       return { ok: true, data: summary }
     } catch (error) {
       console.error("Error getting today's summary:", error)
+      return {
+        ok: false,
+        code: 'DB_ERROR',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  async updateLog(request: UpdateAttendanceLogRequest): Promise<Result<AttendanceLog>> {
+    try {
+      const log = await db.updateAttendanceLog(request.id, {
+        eventType: request.eventType,
+        timestamp: request.timestamp,
+        note: request.note
+      })
+      return { ok: true, data: log }
+    } catch (error) {
+      console.error('Error updating attendance log:', error)
+      return {
+        ok: false,
+        code: 'DB_ERROR',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  async deleteLog(request: DeleteAttendanceLogRequest): Promise<Result<void>> {
+    try {
+      await db.deleteAttendanceLog(request.id)
+      return { ok: true, data: undefined }
+    } catch (error) {
+      console.error('Error deleting attendance log:', error)
+      return {
+        ok: false,
+        code: 'DB_ERROR',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  async getDailySummaries(request: GetDailySummariesRequest): Promise<Result<DailySummary[]>> {
+    try {
+      const summaries = await db.getDailySummaries(request.yearMonth)
+      return { ok: true, data: summaries }
+    } catch (error) {
+      console.error('Error getting daily summaries:', error)
+      return {
+        ok: false,
+        code: 'DB_ERROR',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  async getMonthlySummary(request: GetMonthlySummaryRequest): Promise<Result<MonthlySummary>> {
+    try {
+      const summary = await db.getMonthlySummary(request.yearMonth)
+      return { ok: true, data: summary }
+    } catch (error) {
+      console.error('Error getting monthly summary:', error)
       return {
         ok: false,
         code: 'DB_ERROR',

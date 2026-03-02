@@ -1,1 +1,1 @@
-export type TabType = 'attendance' | 'attendance-history'
+export type TabType = 'attendance' | 'attendance-history' | 'daily-summary' | 'monthly-summary'

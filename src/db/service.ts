@@ -1,11 +1,12 @@
 import { getPrismaClient } from "./client";
 import { Prisma } from "@prisma/client";
 import {
-  ATTENDANCE_EVENT_TYPES,
   type AttendanceEventType,
   type AttendanceLog,
   type AttendanceLogsPage,
   type AttendanceSummary,
+  type DailySummary,
+  type MonthlySummary,
 } from "../shared/attendance";
 
 interface CursorPayload {
@@ -23,7 +24,6 @@ export async function saveAttendanceLog(
   const record = await prisma.attendanceLog.create({
     data: {
       eventType,
-      type: toLegacyType(eventType),
       timestamp,
       note: note ?? null,
     },
@@ -79,7 +79,7 @@ export async function getAttendanceLogs({
 
   const logs: AttendanceLog[] = rows.map((row) => ({
     id: row.id,
-    eventType: normalizeEventType(row.eventType, row.type),
+    eventType: row.eventType as AttendanceEventType,
     timestamp: row.timestamp,
     note: row.note ?? undefined,
     createdAt: row.createdAt.toISOString(),
@@ -93,6 +93,32 @@ export async function getAttendanceLogs({
   return { logs, nextCursor };
 }
 
+export function calculateWorkedSeconds(
+  events: { eventType: string; timestamp: string }[],
+  countCurrentSession: boolean,
+): { workedSeconds: number; isWorking: boolean } {
+  let workedSeconds = 0;
+  let currentClockInTime: number | null = null;
+
+  for (const event of events) {
+    if (event.eventType === "clock_in" && currentClockInTime === null) {
+      currentClockInTime = new Date(event.timestamp).getTime();
+    } else if (event.eventType === "clock_out" && currentClockInTime !== null) {
+      workedSeconds += Math.floor(
+        (new Date(event.timestamp).getTime() - currentClockInTime) / 1000,
+      );
+      currentClockInTime = null;
+    }
+  }
+
+  const isWorking = currentClockInTime !== null;
+  if (countCurrentSession && currentClockInTime !== null) {
+    workedSeconds += Math.floor((Date.now() - currentClockInTime) / 1000);
+  }
+
+  return { workedSeconds: Math.max(0, workedSeconds), isWorking };
+}
+
 export async function getTodaySummary(
   dayStartIso: string,
   dayEndIso: string,
@@ -102,13 +128,7 @@ export async function getTodaySummary(
   const firstClockInRow = await prisma.attendanceLog.findFirst({
     where: {
       timestamp: { gte: dayStartIso, lt: dayEndIso },
-      OR: [
-        { eventType: "clock_in" },
-        {
-          eventType: "",
-          type: { in: ["打刻", "出勤", "clock_in"] },
-        },
-      ],
+      eventType: "clock_in",
     },
     orderBy: { timestamp: "asc" },
     select: { timestamp: true },
@@ -131,30 +151,126 @@ export async function getTodaySummary(
     select: { eventType: true, timestamp: true },
   });
 
-  let workedSeconds = 0;
-  let currentClockInTime: number | null = null;
-
-  for (const event of events) {
-    if (event.eventType === "clock_in" && currentClockInTime === null) {
-      currentClockInTime = new Date(event.timestamp).getTime();
-    } else if (event.eventType === "clock_out" && currentClockInTime !== null) {
-      workedSeconds += Math.floor(
-        (new Date(event.timestamp).getTime() - currentClockInTime) / 1000,
-      );
-      currentClockInTime = null;
-    }
-  }
-
-  const isWorking = currentClockInTime !== null;
-  if (currentClockInTime !== null) {
-    workedSeconds += Math.floor((Date.now() - currentClockInTime) / 1000);
-  }
+  const { workedSeconds, isWorking } = calculateWorkedSeconds(events, true);
 
   return {
     firstClockIn: firstClockInRow?.timestamp || undefined,
     latestEvent: latestEventRow?.timestamp || undefined,
-    workedSeconds: Math.max(0, workedSeconds),
+    workedSeconds,
     isWorking,
+  };
+}
+
+export async function updateAttendanceLog(
+  id: number,
+  data: {
+    eventType?: AttendanceEventType;
+    timestamp?: string;
+    note?: string;
+  },
+): Promise<AttendanceLog> {
+  const prisma = getPrismaClient();
+
+  const updateData: Prisma.AttendanceLogUpdateInput = {};
+  if (data.eventType !== undefined) updateData.eventType = data.eventType;
+  if (data.timestamp !== undefined) updateData.timestamp = data.timestamp;
+  if (data.note !== undefined) updateData.note = data.note;
+
+  const row = await prisma.attendanceLog.update({
+    where: { id },
+    data: updateData,
+  });
+
+  return {
+    id: row.id,
+    eventType: row.eventType as AttendanceEventType,
+    timestamp: row.timestamp,
+    note: row.note ?? undefined,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export async function deleteAttendanceLog(id: number): Promise<void> {
+  const prisma = getPrismaClient();
+  await prisma.attendanceLog.delete({ where: { id } });
+}
+
+export async function getDailySummaries(
+  yearMonth: string,
+): Promise<DailySummary[]> {
+  const prisma = getPrismaClient();
+
+  const [year, month] = yearMonth.split("-").map(Number);
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 1);
+  const startIso = startDate.toISOString();
+  const endIso = endDate.toISOString();
+
+  const events = await prisma.attendanceLog.findMany({
+    where: {
+      timestamp: { gte: startIso, lt: endIso },
+      eventType: { in: ["clock_in", "clock_out"] },
+    },
+    orderBy: [{ timestamp: "asc" }, { id: "asc" }],
+    select: { eventType: true, timestamp: true },
+  });
+
+  const dayMap = new Map<
+    string,
+    { eventType: string; timestamp: string }[]
+  >();
+
+  for (const event of events) {
+    const date = event.timestamp.substring(0, 10);
+    const existing = dayMap.get(date);
+    if (existing) {
+      existing.push(event);
+    } else {
+      dayMap.set(date, [event]);
+    }
+  }
+
+  const summaries: DailySummary[] = [];
+  for (const [date, dayEvents] of dayMap) {
+    const { workedSeconds } = calculateWorkedSeconds(dayEvents, false);
+
+    const clockIns = dayEvents.filter((e) => e.eventType === "clock_in");
+    const clockOuts = dayEvents.filter((e) => e.eventType === "clock_out");
+
+    summaries.push({
+      date,
+      workedSeconds,
+      firstClockIn: clockIns.length > 0 ? clockIns[0].timestamp : undefined,
+      lastClockOut:
+        clockOuts.length > 0
+          ? clockOuts[clockOuts.length - 1].timestamp
+          : undefined,
+      logCount: dayEvents.length,
+    });
+  }
+
+  summaries.sort((a, b) => a.date.localeCompare(b.date));
+  return summaries;
+}
+
+export async function getMonthlySummary(
+  yearMonth: string,
+): Promise<MonthlySummary> {
+  const dailySummaries = await getDailySummaries(yearMonth);
+
+  const totalWorkedSeconds = dailySummaries.reduce(
+    (sum, d) => sum + d.workedSeconds,
+    0,
+  );
+  const workingDays = dailySummaries.filter(
+    (d) => d.workedSeconds > 0,
+  ).length;
+
+  return {
+    yearMonth,
+    totalWorkedSeconds,
+    workingDays,
+    dailySummaries,
   };
 }
 
@@ -180,42 +296,3 @@ function decodeCursorValue(cursor: string): CursorPayload | null {
   }
 }
 
-function normalizeEventType(
-  eventType: string | undefined | null,
-  legacyType: string | undefined | null,
-): AttendanceEventType {
-  if (
-    eventType &&
-    ATTENDANCE_EVENT_TYPES.includes(eventType as AttendanceEventType)
-  ) {
-    return eventType as AttendanceEventType;
-  }
-
-  switch (legacyType) {
-    case "退勤":
-    case "clock_out":
-      return "clock_out";
-    case "休憩開始":
-    case "break_start":
-      return "break_start";
-    case "休憩終了":
-    case "break_end":
-      return "break_end";
-    default:
-      return "clock_in";
-  }
-}
-
-function toLegacyType(eventType: AttendanceEventType): string {
-  switch (eventType) {
-    case "clock_out":
-      return "退勤";
-    case "break_start":
-      return "休憩開始";
-    case "break_end":
-      return "休憩終了";
-    case "clock_in":
-    default:
-      return "打刻";
-  }
-}

@@ -49,3 +49,41 @@ export interface GetAttendanceLogsRequest {
 export interface GetTodaySummaryRequest {
   date?: string
 }
+
+// Daily summary
+export interface DailySummary {
+  date: string // YYYY-MM-DD
+  workedSeconds: number
+  firstClockIn?: string
+  lastClockOut?: string
+  logCount: number
+}
+
+// Monthly summary
+export interface MonthlySummary {
+  yearMonth: string // YYYY-MM
+  totalWorkedSeconds: number
+  workingDays: number
+  dailySummaries: DailySummary[]
+}
+
+// Edit requests
+export interface UpdateAttendanceLogRequest {
+  id: number
+  eventType?: AttendanceEventType
+  timestamp?: string
+  note?: string
+}
+
+export interface DeleteAttendanceLogRequest {
+  id: number
+}
+
+// Summary requests
+export interface GetDailySummariesRequest {
+  yearMonth: string // YYYY-MM
+}
+
+export interface GetMonthlySummaryRequest {
+  yearMonth: string // YYYY-MM
+}
