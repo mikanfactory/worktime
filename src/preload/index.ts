@@ -2,8 +2,12 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
   AttendanceLogRequest,
+  DeleteAttendanceLogRequest,
   GetAttendanceLogsRequest,
-  GetTodaySummaryRequest
+  GetDailySummariesRequest,
+  GetMonthlySummaryRequest,
+  GetTodaySummaryRequest,
+  UpdateAttendanceLogRequest
 } from '../shared/attendance'
 
 // Custom APIs for renderer
@@ -12,7 +16,15 @@ const api = {
   getAttendanceLogs: (request?: GetAttendanceLogsRequest) =>
     ipcRenderer.invoke('attendance:getLogs', request),
   getTodaySummary: (request?: GetTodaySummaryRequest) =>
-    ipcRenderer.invoke('attendance:getTodaySummary', request)
+    ipcRenderer.invoke('attendance:getTodaySummary', request),
+  updateAttendanceLog: (request: UpdateAttendanceLogRequest) =>
+    ipcRenderer.invoke('attendance:updateLog', request),
+  deleteAttendanceLog: (request: DeleteAttendanceLogRequest) =>
+    ipcRenderer.invoke('attendance:deleteLog', request),
+  getDailySummaries: (request: GetDailySummariesRequest) =>
+    ipcRenderer.invoke('attendance:getDailySummaries', request),
+  getMonthlySummary: (request: GetMonthlySummaryRequest) =>
+    ipcRenderer.invoke('attendance:getMonthlySummary', request)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
