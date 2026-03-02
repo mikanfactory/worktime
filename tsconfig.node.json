@@ -5,5 +5,5 @@
     "composite": true,
     "types": ["electron-vite/node"]
   },
-  "exclude": ["src/main/services/experimental/**/*"]
+  "exclude": ["src/main/services/experimental/**/*", "src/**/__tests__/**/*"]
 }

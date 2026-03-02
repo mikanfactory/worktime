@@ -1,23 +1,14 @@
 import '@testing-library/jest-dom'
 
-// Mock Electron APIs for testing
-global.window = Object.create(window)
-
-// Mock the API object that would normally be provided by preload
-Object.defineProperty(window, 'api', {
-  value: {
-    translate: vi.fn(),
-    saveApiKey: vi.fn(),
-    getApiKey: vi.fn(),
-    updatePrompt: vi.fn(),
-    getPrompt: vi.fn(),
-    getTranslationLogs: vi.fn(),
-    searchWord: vi.fn(),
-    getWordSearchLogs: vi.fn(),
-    getTodayClockStatus: vi.fn().mockResolvedValue({
-      success: true,
-      status: { isRunning: false, accumulatedSeconds: 0, lastTimestamp: null }
-    })
-  },
-  writable: true
-})
+// Mock Electron APIs for testing (only in jsdom environment)
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, 'api', {
+    value: {
+      logAttendance: vi.fn(),
+      getAttendanceLogs: vi.fn(),
+      getTodaySummary: vi.fn()
+    },
+    writable: true,
+    configurable: true
+  })
+}
