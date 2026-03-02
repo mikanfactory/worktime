@@ -40,36 +40,34 @@ BeaverLog is an Electron-based attendance management application. It features a 
 
 ### Multi-Process Structure
 
-- **Main Process** (`src/main/index.ts`): Handles app lifecycle, window management, IPC handlers for OpenAI API calls, API key encryption/storage, and database operations
+- **Main Process** (`src/main/index.ts`): Handles app lifecycle, window management, IPC handlers for attendance logging, and database operations
 - **Preload Script** (`src/preload/index.ts`): Secure bridge between renderer and main processes via contextBridge
-- **Renderer Process** (`src/renderer/src/`): React frontend with translation UI, history management, and settings
+- **Renderer Process** (`src/renderer/src/`): React frontend with attendance clock in/out UI and attendance history
 
 ### Key Components
 
-- **Database Layer** (`src/db/`): Prisma-based SQLite database with migration system for translation history storage (`schema.prisma`, `client.ts`, `service.ts`, `migrate.ts`)
-- **API Integration**: OpenAI GPT-4o-mini integration with encrypted API key storage using Electron's safeStorage
+- **Database Layer** (`src/db/`): Prisma-based SQLite database with migration system for attendance log storage (`schema.prisma`, `client.ts`, `service.ts`, `migrate.ts`)
+- **Service Layer** (`src/main/services/`): `AttendanceService` (勤怠ロジック), `IpcHandlerService` (IPC通信), `WindowManagerService` (ウィンドウ管理)
 - **UI Components**: Modern component architecture using Radix UI primitives and Tailwind CSS
 
 ### IPC Communication
 
 The app uses secure IPC handlers for:
 
-- `translate-text`: OpenAI API translation requests
-- `save-api-key`/`get-api-key`: Encrypted API key management
-- `save-translation-log`/`get-translation-logs`: Translation history persistence
+- `attendance:log`: Record attendance events (clock in/out)
+- `attendance:getLogs`: Retrieve attendance logs (cursor-based pagination)
+- `attendance:getTodaySummary`: Get today's attendance summary
 
 ### State Management
 
-React state management handles:
+The `useAttendance` hook manages:
 
-- Active tab navigation (translate/history/settings)
-- Translation input/output text
-- API key and custom prompt configuration
-- Translation history with database synchronization
+- Tab navigation (attendance / attendance-history)
+- Attendance logs and daily summary
+- Real-time elapsed time counter
 
 ## Development Notes
 
 - Uses electron-vite for build tooling with separate configurations for main, preload, and renderer processes
-- Environment variables: `MAIN_VITE_OPENAI_API_KEY` for fallback API key, `RENDERER_VITE_OPENAI_API_KEY` for renderer fallback
 - Database migrations are automatically applied on app startup
-- API keys are encrypted using Electron's safeStorage and stored in user data directory
+- Database path: `app.getPath("userData")/beaver_log.db`
