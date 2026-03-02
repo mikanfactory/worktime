@@ -23,3 +23,6 @@ dev.db-journal
 
 # ESLint cache
 .eslintcache
+
+# Test coverage
+coverage/
