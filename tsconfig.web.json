@@ -7,6 +7,10 @@
     "src/preload/*.d.ts",
     "src/shared/**/*"
   ],
+  "exclude": [
+    "src/renderer/src/**/__tests__/**",
+    "src/renderer/src/hooks/__tests__/**"
+  ],
   "compilerOptions": {
     "composite": true,
     "jsx": "react-jsx",
