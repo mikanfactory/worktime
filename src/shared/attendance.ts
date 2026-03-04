@@ -1,85 +1,72 @@
-export const ATTENDANCE_EVENT_TYPES = [
-  'clock_in',
-  'clock_out',
-  'break_start',
-  'break_end'
-] as const
-
-export type AttendanceEventType = (typeof ATTENDANCE_EVENT_TYPES)[number]
-
 export type AttendanceErrorCode = 'VALIDATION_ERROR' | 'DB_ERROR' | 'INTERNAL_ERROR'
 
 export type Result<T> =
   | { ok: true; data: T }
   | { ok: false; code: AttendanceErrorCode; message: string }
 
-export interface AttendanceLog {
+export interface BreakSession {
   id: number
-  eventType: AttendanceEventType
-  timestamp: string
+  workSessionId: number
+  startAt: string
+  endAt?: string
   note?: string
-  createdAt: string
 }
 
-export interface AttendanceLogsPage {
-  logs: AttendanceLog[]
-  nextCursor?: string
+export interface WorkSession {
+  id: number
+  date: string
+  clockInAt: string
+  clockOutAt?: string
+  note?: string
+  breaks: BreakSession[]
+  createdAt: string
+  updatedAt: string
 }
 
 export interface AttendanceSummary {
   firstClockIn?: string
   latestEvent?: string
   workedSeconds: number
+  breakSeconds: number
   isWorking: boolean
+  isOnBreak: boolean
+  currentSession?: WorkSession
 }
 
-export interface AttendanceLogRequest {
-  eventType: AttendanceEventType
-  note?: string
-  occurredAt?: string
+export interface DailySummary {
+  date: string // YYYY-MM-DD
+  workedSeconds: number
+  breakSeconds: number
+  firstClockIn?: string
+  lastClockOut?: string
+  sessionCount: number
 }
 
-export interface GetAttendanceLogsRequest {
-  from?: string
-  to?: string
-  limit?: number
-  cursor?: string
+export interface MonthlySummary {
+  yearMonth: string // YYYY-MM
+  totalWorkedSeconds: number
+  totalBreakSeconds: number
+  workingDays: number
+  dailySummaries: DailySummary[]
 }
+
+// Request types
 
 export interface GetTodaySummaryRequest {
   date?: string
 }
 
-// Daily summary
-export interface DailySummary {
-  date: string // YYYY-MM-DD
-  workedSeconds: number
-  firstClockIn?: string
-  lastClockOut?: string
-  logCount: number
-}
-
-// Monthly summary
-export interface MonthlySummary {
-  yearMonth: string // YYYY-MM
-  totalWorkedSeconds: number
-  workingDays: number
-  dailySummaries: DailySummary[]
-}
-
-// Edit requests
-export interface UpdateAttendanceLogRequest {
+export interface UpdateWorkSessionRequest {
   id: number
-  eventType?: AttendanceEventType
-  timestamp?: string
+  clockInAt?: string
+  clockOutAt?: string
   note?: string
 }
 
-export interface DeleteAttendanceLogRequest {
+export interface DeleteWorkSessionRequest {
   id: number
 }
 
-// Summary requests
 export interface GetDailySummariesRequest {
   yearMonth: string // YYYY-MM
 }
