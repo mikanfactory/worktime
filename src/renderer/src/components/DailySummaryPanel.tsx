@@ -1,8 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table'
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import type { DailySummary } from '../../../shared/attendance'
 
@@ -37,15 +35,22 @@ function formatTime(isoString: string): string {
 function formatWorkedTime(seconds: number): string {
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+  return `${hours}h ${String(minutes).padStart(2, '0')}m`
 }
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr + 'T00:00:00')
-  const weekdays = ['日', '月', '火', '水', '木', '金', '土']
-  const day = date.getDate()
+  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
   const weekday = weekdays[date.getDay()]
-  return `${day}日 (${weekday})`
+  return `${month}/${day} (${weekday})`
+}
+
+function isHoliday(dateStr: string): boolean {
+  const date = new Date(dateStr + 'T00:00:00')
+  const dayOfWeek = date.getDay()
+  return dayOfWeek === 0 || dayOfWeek === 6
 }
 
 export function DailySummaryPanel({
@@ -72,73 +77,115 @@ export function DailySummaryPanel({
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="h-full flex flex-col p-6 space-y-6">
-      <Card className="flex-1 flex flex-col overflow-hidden">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>日次集計</CardTitle>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={() => handleMonthChange(-1)}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm font-medium min-w-[100px] text-center">
-                {formatYearMonth(yearMonth)}
-              </span>
-              <Button variant="outline" size="icon" onClick={() => handleMonthChange(1)}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+    <div className="h-full flex flex-col p-6 gap-6">
+      <h2 className="text-xl font-semibold text-foreground">Daily Summary</h2>
+
+      <div className="flex items-center justify-center gap-4">
+        <Button
+          variant="secondary"
+          size="icon"
+          className="h-9 w-9 rounded-lg"
+          onClick={() => handleMonthChange(-1)}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className="text-lg font-semibold min-w-[120px] text-center">
+          {formatYearMonth(yearMonth)}
+        </span>
+        <Button
+          variant="secondary"
+          size="icon"
+          className="h-9 w-9 rounded-lg"
+          onClick={() => handleMonthChange(1)}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <div className="flex-1 overflow-hidden rounded-lg border">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
-        </CardHeader>
-        <CardContent className="flex-1 overflow-hidden p-0">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-full">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
-          ) : (
-            <ScrollArea className="h-full">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>日付</TableHead>
-                    <TableHead>出勤時刻</TableHead>
-                    <TableHead>退勤時刻</TableHead>
-                    <TableHead className="text-right">勤務時間</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dailySummaries.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground h-24">
-                        この月の勤務記録はありません。
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    dailySummaries.map((day) => (
-                      <TableRow
+        ) : (
+          <ScrollArea className="h-full">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-secondary">
+                  <th className="text-left text-sm font-semibold text-muted-foreground px-4 h-12">
+                    Date
+                  </th>
+                  <th className="text-left text-sm font-semibold text-muted-foreground px-4 h-12">
+                    Clock In
+                  </th>
+                  <th className="text-left text-sm font-semibold text-muted-foreground px-4 h-12">
+                    Clock Out
+                  </th>
+                  <th className="text-left text-sm font-semibold text-muted-foreground px-4 h-12">
+                    Working Hours
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {dailySummaries.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="text-center text-muted-foreground h-24 px-4">
+                      No records found for this month.
+                    </td>
+                  </tr>
+                ) : (
+                  dailySummaries.map((day) => {
+                    const holiday = isHoliday(day.date)
+                    const hasWork = day.workedSeconds > 0
+                    return (
+                      <tr
                         key={day.date}
-                        className={onDateClick ? 'cursor-pointer hover:bg-muted/50' : ''}
+                        className={`border-b last:border-b-0 ${
+                          holiday ? 'bg-[#FAFAFA]' : ''
+                        } ${onDateClick ? 'cursor-pointer hover:bg-muted/50' : ''}`}
                         onClick={() => onDateClick?.(day.date)}
                       >
-                        <TableCell className="font-medium">{formatDate(day.date)}</TableCell>
-                        <TableCell>
+                        <td
+                          className={`text-sm px-4 h-11 ${
+                            holiday && !hasWork ? 'text-[#A3A3A3]' : 'text-foreground'
+                          }`}
+                        >
+                          {formatDate(day.date)}
+                        </td>
+                        <td
+                          className={`text-sm px-4 h-11 ${
+                            holiday && !hasWork ? 'text-[#A3A3A3]' : 'text-foreground'
+                          }`}
+                        >
                           {day.firstClockIn ? formatTime(day.firstClockIn) : '-'}
-                        </TableCell>
-                        <TableCell>
+                        </td>
+                        <td
+                          className={`text-sm px-4 h-11 ${
+                            holiday && !hasWork ? 'text-[#A3A3A3]' : 'text-foreground'
+                          }`}
+                        >
                           {day.lastClockOut ? formatTime(day.lastClockOut) : '-'}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {formatWorkedTime(day.workedSeconds)}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          )}
-        </CardContent>
-      </Card>
+                        </td>
+                        <td
+                          className={`text-sm font-medium px-4 h-11 ${
+                            holiday && !hasWork ? 'text-[#A3A3A3]' : 'text-foreground'
+                          }`}
+                        >
+                          {holiday && !hasWork
+                            ? 'Holiday'
+                            : hasWork
+                              ? formatWorkedTime(day.workedSeconds)
+                              : '-'}
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </ScrollArea>
+        )}
+      </div>
     </div>
   )
 }

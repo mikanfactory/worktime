@@ -1,5 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
@@ -27,17 +26,13 @@ function formatYearMonth(yearMonth: string): string {
   return `${year}年${parseInt(month, 10)}月`
 }
 
-function formatHoursMinutes(seconds: number): string {
+function formatHoursMinutesShort(seconds: number): string {
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
-  return `${hours}時間${minutes}分`
+  return `${hours}h ${String(minutes).padStart(2, '0')}m`
 }
 
-function formatWorkedTimeShort(seconds: number): string {
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  return `${hours}h${minutes > 0 ? `${minutes}m` : ''}`
-}
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export function MonthlySummaryPanel({
   monthlySummary,
@@ -61,28 +56,60 @@ export function MonthlySummaryPanel({
     void onLoadSummary(yearMonth)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const maxSeconds =
-    monthlySummary?.dailySummaries.reduce(
-      (max, d) => Math.max(max, d.workedSeconds),
-      0
-    ) ?? 0
+  const avgSecondsPerDay = useMemo(() => {
+    if (!monthlySummary || monthlySummary.workingDays === 0) return 0
+    return Math.round(monthlySummary.totalWorkedSeconds / monthlySummary.workingDays)
+  }, [monthlySummary])
+
+  const weekdayData = useMemo(() => {
+    if (!monthlySummary) return DAY_LABELS.map((label) => ({ label, seconds: 0 }))
+
+    const totals = [0, 0, 0, 0, 0, 0, 0]
+    const counts = [0, 0, 0, 0, 0, 0, 0]
+
+    for (const day of monthlySummary.dailySummaries) {
+      const date = new Date(day.date + 'T00:00:00')
+      const dow = date.getDay()
+      if (day.workedSeconds > 0) {
+        totals[dow] += day.workedSeconds
+        counts[dow] += 1
+      }
+    }
+
+    return DAY_LABELS.map((label, i) => ({
+      label,
+      seconds: counts[i] > 0 ? Math.round(totals[i] / counts[i]) : 0
+    }))
+  }, [monthlySummary])
+
+  const maxBarSeconds = useMemo(() => {
+    return Math.max(...weekdayData.map((d) => d.seconds), 1)
+  }, [weekdayData])
 
   return (
-    <div className="h-full flex flex-col p-6 space-y-6">
-      {/* Header with month navigation */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">月次集計</h2>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => handleMonthChange(-1)}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-sm font-medium min-w-[100px] text-center">
-            {formatYearMonth(yearMonth)}
-          </span>
-          <Button variant="outline" size="icon" onClick={() => handleMonthChange(1)}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
+    <div className="h-full flex flex-col p-6 gap-6">
+      <h2 className="text-xl font-semibold text-foreground">Monthly Summary</h2>
+
+      <div className="flex items-center justify-center gap-4">
+        <Button
+          variant="secondary"
+          size="icon"
+          className="h-9 w-9 rounded-lg"
+          onClick={() => handleMonthChange(-1)}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className="text-lg font-semibold min-w-[120px] text-center">
+          {formatYearMonth(yearMonth)}
+        </span>
+        <Button
+          variant="secondary"
+          size="icon"
+          className="h-9 w-9 rounded-lg"
+          onClick={() => handleMonthChange(1)}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
       </div>
 
       {isLoading ? (
@@ -91,72 +118,58 @@ export function MonthlySummaryPanel({
         </div>
       ) : (
         <>
-          {/* Summary cards */}
-          <div className="grid grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">合計勤務時間</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">
-                  {monthlySummary
-                    ? formatHoursMinutes(monthlySummary.totalWorkedSeconds)
-                    : '-'}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">出勤日数</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">
-                  {monthlySummary ? `${monthlySummary.workingDays}日` : '-'}
-                </p>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="rounded-lg border p-5 flex flex-col gap-2">
+              <span className="text-[13px] text-muted-foreground">Total Working Hours</span>
+              <span className="text-[32px] font-bold text-foreground leading-tight">
+                {monthlySummary ? formatHoursMinutesShort(monthlySummary.totalWorkedSeconds) : '-'}
+              </span>
+            </div>
+            <div className="rounded-lg border p-5 flex flex-col gap-2">
+              <span className="text-[13px] text-muted-foreground">Working Days</span>
+              <span className="text-[32px] font-bold text-foreground leading-tight">
+                {monthlySummary ? `${monthlySummary.workingDays} days` : '-'}
+              </span>
+            </div>
+            <div className="rounded-lg border p-5 flex flex-col gap-2">
+              <span className="text-[13px] text-muted-foreground">Avg Hours/Day</span>
+              <span className="text-[32px] font-bold text-foreground leading-tight">
+                {monthlySummary && monthlySummary.workingDays > 0
+                  ? formatHoursMinutesShort(avgSecondsPerDay)
+                  : '-'}
+              </span>
+            </div>
           </div>
 
-          {/* Daily bar chart */}
-          <Card className="flex-1 flex flex-col overflow-hidden">
-            <CardHeader>
-              <CardTitle className="text-sm">日別勤務時間</CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-hidden p-0 px-6 pb-6">
-              <ScrollArea className="h-full">
-                <div className="space-y-2">
-                  {monthlySummary?.dailySummaries.length === 0 && (
-                    <p className="text-center text-muted-foreground py-8">
-                      この月の勤務記録はありません。
-                    </p>
-                  )}
-                  {monthlySummary?.dailySummaries.map((day) => {
-                    const percent =
-                      maxSeconds > 0
-                        ? Math.round((day.workedSeconds / maxSeconds) * 100)
-                        : 0
-                    const dayNum = parseInt(day.date.split('-')[2], 10)
-                    return (
-                      <div key={day.date} className="flex items-center gap-3">
-                        <span className="text-xs text-muted-foreground w-6 text-right">
-                          {dayNum}
-                        </span>
-                        <div className="flex-1 h-6 bg-muted rounded-sm overflow-hidden">
-                          <div
-                            className="h-full bg-primary rounded-sm transition-all"
-                            style={{ width: `${percent}%` }}
-                          />
-                        </div>
-                        <span className="text-xs font-mono w-16 text-right">
-                          {formatWorkedTimeShort(day.workedSeconds)}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
+          <div className="flex-1 rounded-lg border p-5 flex flex-col gap-4 overflow-hidden">
+            <span className="text-base font-semibold text-foreground">Daily Working Hours</span>
+            <ScrollArea className="flex-1">
+              <div className="flex items-end gap-2 h-full min-h-[200px]" style={{ paddingBottom: 24 }}>
+                {weekdayData.map((item) => {
+                  const barHeight =
+                    item.seconds > 0
+                      ? Math.max(Math.round((item.seconds / maxBarSeconds) * 280), 4)
+                      : 4
+                  return (
+                    <div
+                      key={item.label}
+                      className="flex-1 flex flex-col items-center justify-end gap-1"
+                      style={{ height: '100%' }}
+                    >
+                      <div
+                        className="w-full rounded-t"
+                        style={{
+                          height: barHeight,
+                          backgroundColor: item.seconds > 0 ? '#4A90D9' : '#E8EDF2'
+                        }}
+                      />
+                      <span className="text-[10px] text-muted-foreground">{item.label}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </ScrollArea>
+          </div>
         </>
       )}
     </div>
