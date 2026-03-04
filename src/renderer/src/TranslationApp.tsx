@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Header } from './components/Header'
 import { AttendancePanel } from './components/AttendancePanel'
@@ -14,12 +14,6 @@ export default function AttendanceApp() {
   const [activeTab, setActiveTab] = useState<TabType>('attendance')
   const attendance = useAttendance()
 
-  useEffect(() => {
-    if (activeTab === 'attendance-history') {
-      void attendance.loadLogs({ limit: 50 })
-    }
-  }, [activeTab, attendance.loadLogs])
-
   return (
     <div className="flex h-screen bg-background">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
@@ -29,28 +23,20 @@ export default function AttendanceApp() {
           {activeTab === 'attendance' ? (
             <AttendancePanel
               summary={attendance.summary}
-              onLogAttendance={() => attendance.logAttendance(attendance.summary.isWorking ? 'clock_out' : 'clock_in')}
+              onClockIn={() => attendance.clockIn()}
+              onClockOut={() => attendance.clockOut()}
+              onStartBreak={() => attendance.startBreak()}
+              onEndBreak={() => attendance.endBreak()}
               onRefreshSummary={attendance.loadTodaySummary}
               error={attendance.error}
             />
           ) : activeTab === 'attendance-history' ? (
             <AttendanceHistoryPanel
-              logs={attendance.logs}
+              dailySummaries={attendance.dailySummaries}
               isLoading={attendance.isLoading}
-              onUpdateLog={attendance.updateLog}
-              onDeleteLog={attendance.deleteLog}
-              onLogAttendance={async (eventType, occurredAt, note) => {
-                const api = window.api
-                if (!api) return false
-                const result = await api.logAttendance({ eventType, occurredAt, note })
-                if (result.ok) {
-                  await attendance.loadLogs({ limit: 50 })
-                  return true
-                }
-                return false
-              }}
-              onRefreshLogs={() => attendance.loadLogs({ limit: 50 })}
-              onLoadLogs={attendance.loadLogs}
+              onUpdateWorkSession={attendance.updateWorkSession}
+              onDeleteWorkSession={attendance.deleteWorkSession}
+              onLoadSummaries={attendance.loadDailySummaries}
             />
           ) : activeTab === 'daily-summary' ? (
             <DailySummaryPanel

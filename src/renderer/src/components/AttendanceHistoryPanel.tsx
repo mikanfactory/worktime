@@ -1,27 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
 import type {
-  AttendanceEventType,
-  AttendanceLog,
-  GetAttendanceLogsRequest,
-  UpdateAttendanceLogRequest
+  DailySummary,
+  UpdateWorkSessionRequest
 } from '../../../shared/attendance'
 import { ScrollArea } from './ui/scroll-area'
 import { Button } from './ui/button'
-import { EditLogDialog } from './EditLogDialog'
-import { ChevronLeft, ChevronRight, Loader2, Plus } from 'lucide-react'
+import { EditSessionDialog } from './EditLogDialog'
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 
 interface AttendanceHistoryPanelProps {
-  logs: AttendanceLog[]
+  dailySummaries: DailySummary[]
   isLoading: boolean
-  onUpdateLog: (request: UpdateAttendanceLogRequest) => Promise<boolean>
-  onDeleteLog: (id: number) => Promise<boolean>
-  onLogAttendance: (
-    eventType: AttendanceEventType,
-    timestamp: string,
-    note?: string
-  ) => Promise<boolean>
-  onRefreshLogs: () => Promise<void>
-  onLoadLogs?: (request: GetAttendanceLogsRequest) => Promise<void>
+  onUpdateWorkSession: (request: UpdateWorkSessionRequest) => Promise<boolean>
+  onDeleteWorkSession: (id: number) => Promise<boolean>
+  onLoadSummaries: (yearMonth: string) => Promise<void>
 }
 
 function getCurrentYearMonth(): string {
@@ -40,106 +32,82 @@ function formatYearMonth(yearMonth: string): string {
   return `${year}年${parseInt(month, 10)}月`
 }
 
-function getMonthRange(yearMonth: string): { from: string; to: string } {
-  const [year, month] = yearMonth.split('-').map(Number)
-  const from = new Date(year, month - 1, 1).toISOString()
-  const to = new Date(year, month, 0, 23, 59, 59, 999).toISOString()
-  return { from, to }
+function formatTime(isoString: string): string {
+  const date = new Date(isoString)
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+function formatWorkedTime(seconds: number): string {
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  return `${hours}h ${String(minutes).padStart(2, '0')}m`
+}
+
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr + 'T00:00:00')
+  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const weekday = weekdays[date.getDay()]
+  return `${month}/${day} (${weekday})`
+}
+
+function isHoliday(dateStr: string): boolean {
+  const date = new Date(dateStr + 'T00:00:00')
+  const dayOfWeek = date.getDay()
+  return dayOfWeek === 0 || dayOfWeek === 6
 }
 
 export function AttendanceHistoryPanel({
-  logs,
+  dailySummaries,
   isLoading,
-  onUpdateLog,
-  onDeleteLog,
-  onLogAttendance,
-  onRefreshLogs,
-  onLoadLogs
+  onUpdateWorkSession,
+  onDeleteWorkSession,
+  onLoadSummaries
 }: AttendanceHistoryPanelProps) {
   const [editDialogOpen, setEditDialogOpen] = useState(false)
-  const [selectedLog, setSelectedLog] = useState<AttendanceLog | null>(null)
+  const [selectedSummary, setSelectedSummary] = useState<DailySummary | null>(null)
   const [yearMonth, setYearMonth] = useState(getCurrentYearMonth)
 
-  const loadLogsForMonth = useCallback(
-    (ym: string) => {
-      if (onLoadLogs) {
-        const { from, to } = getMonthRange(ym)
-        void onLoadLogs({ from, to, limit: 200 })
-      } else {
-        void onRefreshLogs()
-      }
-    },
-    [onLoadLogs, onRefreshLogs]
-  )
-
   useEffect(() => {
-    loadLogsForMonth(yearMonth)
+    void onLoadSummaries(yearMonth)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleMonthChange = useCallback(
     (delta: number) => {
       setYearMonth((prev) => {
         const next = shiftMonth(prev, delta)
-        loadLogsForMonth(next)
+        void onLoadSummaries(next)
         return next
       })
     },
-    [loadLogsForMonth]
+    [onLoadSummaries]
   )
 
-  const handleEdit = (log: AttendanceLog) => {
-    setSelectedLog(log)
+  const handleEdit = (summary: DailySummary) => {
+    setSelectedSummary(summary)
     setEditDialogOpen(true)
   }
 
-  const handleAdd = () => {
-    setSelectedLog(null)
-    setEditDialogOpen(true)
-  }
-
-  const handleSave = async (data: {
-    id?: number
-    eventType: AttendanceEventType
-    timestamp: string
-    note?: string
-  }) => {
-    if (data.id) {
-      const success = await onUpdateLog({
-        id: data.id,
-        eventType: data.eventType,
-        timestamp: data.timestamp,
-        note: data.note
-      })
-      if (success) {
-        loadLogsForMonth(yearMonth)
-      }
-      return success
-    }
-
-    const success = await onLogAttendance(data.eventType, data.timestamp, data.note)
+  const handleSave = async (data: UpdateWorkSessionRequest) => {
+    const success = await onUpdateWorkSession(data)
     if (success) {
-      loadLogsForMonth(yearMonth)
+      void onLoadSummaries(yearMonth)
     }
     return success
   }
 
   const handleDelete = async (id: number) => {
-    const success = await onDeleteLog(id)
+    const success = await onDeleteWorkSession(id)
     if (success) {
-      loadLogsForMonth(yearMonth)
+      void onLoadSummaries(yearMonth)
     }
     return success
   }
 
   return (
     <div className="h-full flex flex-col p-6 gap-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-foreground">Attendance History</h2>
-        <Button size="sm" onClick={handleAdd}>
-          <Plus className="h-4 w-4 mr-1" />
-          Add
-        </Button>
-      </div>
+      <h2 className="text-xl font-semibold text-foreground">Attendance History</h2>
 
       <div className="flex items-center justify-center gap-4">
         <Button
@@ -174,44 +142,83 @@ export function AttendanceHistoryPanel({
               <thead>
                 <tr className="bg-secondary">
                   <th className="text-left text-sm font-semibold text-muted-foreground px-4 h-12">
-                    Time
+                    Date
                   </th>
                   <th className="text-left text-sm font-semibold text-muted-foreground px-4 h-12">
-                    Type
+                    Clock In
                   </th>
                   <th className="text-left text-sm font-semibold text-muted-foreground px-4 h-12">
-                    Note
+                    Clock Out
+                  </th>
+                  <th className="text-left text-sm font-semibold text-muted-foreground px-4 h-12">
+                    Break
+                  </th>
+                  <th className="text-left text-sm font-semibold text-muted-foreground px-4 h-12">
+                    Working Hours
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {logs.length === 0 ? (
+                {dailySummaries.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={3}
-                      className="text-center text-muted-foreground h-24 px-4"
-                    >
-                      No attendance logs found.
+                    <td colSpan={5} className="text-center text-muted-foreground h-24 px-4">
+                      No records found for this month.
                     </td>
                   </tr>
                 ) : (
-                  logs.map((log) => (
-                    <tr
-                      key={log.id}
-                      className="border-b last:border-b-0 cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => handleEdit(log)}
-                    >
-                      <td className="text-sm text-foreground px-4 h-12">
-                        {new Date(log.timestamp).toLocaleString()}
-                      </td>
-                      <td className="text-sm font-medium text-foreground px-4 h-12">
-                        {formatEventType(log.eventType)}
-                      </td>
-                      <td className="text-sm text-muted-foreground px-4 h-12">
-                        {log.note || '-'}
-                      </td>
-                    </tr>
-                  ))
+                  dailySummaries.map((day) => {
+                    const holiday = isHoliday(day.date)
+                    const hasWork = day.workedSeconds > 0
+                    return (
+                      <tr
+                        key={day.date}
+                        className={`border-b last:border-b-0 cursor-pointer hover:bg-muted/50 transition-colors ${
+                          holiday ? 'bg-[#FAFAFA]' : ''
+                        }`}
+                        onClick={() => handleEdit(day)}
+                      >
+                        <td
+                          className={`text-sm px-4 h-11 ${
+                            holiday && !hasWork ? 'text-[#A3A3A3]' : 'text-foreground'
+                          }`}
+                        >
+                          {formatDate(day.date)}
+                        </td>
+                        <td
+                          className={`text-sm px-4 h-11 ${
+                            holiday && !hasWork ? 'text-[#A3A3A3]' : 'text-foreground'
+                          }`}
+                        >
+                          {day.firstClockIn ? formatTime(day.firstClockIn) : '-'}
+                        </td>
+                        <td
+                          className={`text-sm px-4 h-11 ${
+                            holiday && !hasWork ? 'text-[#A3A3A3]' : 'text-foreground'
+                          }`}
+                        >
+                          {day.lastClockOut ? formatTime(day.lastClockOut) : '-'}
+                        </td>
+                        <td
+                          className={`text-sm px-4 h-11 ${
+                            holiday && !hasWork ? 'text-[#A3A3A3]' : 'text-foreground'
+                          }`}
+                        >
+                          {day.breakSeconds > 0 ? formatWorkedTime(day.breakSeconds) : '-'}
+                        </td>
+                        <td
+                          className={`text-sm font-medium px-4 h-11 ${
+                            holiday && !hasWork ? 'text-[#A3A3A3]' : 'text-foreground'
+                          }`}
+                        >
+                          {holiday && !hasWork
+                            ? 'Holiday'
+                            : hasWork
+                              ? formatWorkedTime(day.workedSeconds)
+                              : '-'}
+                        </td>
+                      </tr>
+                    )
+                  })
                 )}
               </tbody>
             </table>
@@ -219,28 +226,13 @@ export function AttendanceHistoryPanel({
         )}
       </div>
 
-      <EditLogDialog
+      <EditSessionDialog
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
-        log={selectedLog}
+        summary={selectedSummary}
         onSave={handleSave}
         onDelete={handleDelete}
       />
     </div>
   )
-}
-
-function formatEventType(eventType: AttendanceEventType): string {
-  switch (eventType) {
-    case 'clock_in':
-      return 'Clock In'
-    case 'clock_out':
-      return 'Clock Out'
-    case 'break_start':
-      return 'Break Start'
-    case 'break_end':
-      return 'Break End'
-    default:
-      return eventType
-  }
 }

@@ -11,16 +11,18 @@ describe('DailySummaryPanel', () => {
     {
       date: '2026-03-01',
       workedSeconds: 28800,
+      breakSeconds: 3600,
       firstClockIn: '2026-03-01T09:00:00.000Z',
       lastClockOut: '2026-03-01T17:00:00.000Z',
-      logCount: 2
+      sessionCount: 1
     },
     {
       date: '2026-03-02',
       workedSeconds: 18000,
+      breakSeconds: 0,
       firstClockIn: '2026-03-02T10:00:00.000Z',
       lastClockOut: '2026-03-02T15:00:00.000Z',
-      logCount: 2
+      sessionCount: 1
     }
   ]
 
@@ -68,6 +70,19 @@ describe('DailySummaryPanel', () => {
     // Check worked time is displayed (8h 00m for 28800 seconds, 5h 00m for 18000 seconds)
     expect(screen.getByText('8h 00m')).toBeInTheDocument()
     expect(screen.getByText('5h 00m')).toBeInTheDocument()
+  })
+
+  it('renders break time column', () => {
+    render(
+      <DailySummaryPanel
+        dailySummaries={sampleSummaries}
+        isLoading={false}
+        onLoadSummaries={mockLoadSummaries}
+      />
+    )
+    expect(screen.getByText('Break')).toBeInTheDocument()
+    // First row has 3600 break seconds = 1h 00m
+    expect(screen.getByText('1h 00m')).toBeInTheDocument()
   })
 
   it('navigates months with buttons', async () => {

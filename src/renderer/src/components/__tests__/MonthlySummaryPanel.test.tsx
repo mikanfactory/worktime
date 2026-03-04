@@ -10,21 +10,24 @@ describe('MonthlySummaryPanel', () => {
   const sampleSummary: MonthlySummary = {
     yearMonth: '2026-03',
     totalWorkedSeconds: 46800,
+    totalBreakSeconds: 3600,
     workingDays: 2,
     dailySummaries: [
       {
         date: '2026-03-01',
         workedSeconds: 28800,
+        breakSeconds: 3600,
         firstClockIn: '2026-03-01T09:00:00.000Z',
         lastClockOut: '2026-03-01T17:00:00.000Z',
-        logCount: 2
+        sessionCount: 1
       },
       {
         date: '2026-03-02',
         workedSeconds: 18000,
+        breakSeconds: 0,
         firstClockIn: '2026-03-02T10:00:00.000Z',
         lastClockOut: '2026-03-02T15:00:00.000Z',
-        logCount: 2
+        sessionCount: 1
       }
     ]
   }

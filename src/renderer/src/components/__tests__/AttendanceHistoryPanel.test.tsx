@@ -1,75 +1,30 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { AttendanceHistoryPanel } from '../AttendanceHistoryPanel'
-import type { AttendanceLog } from '../../../../shared/attendance'
+import type { DailySummary } from '../../../../shared/attendance'
 
 const mockProps = {
-  onUpdateLog: vi.fn().mockResolvedValue(true),
-  onDeleteLog: vi.fn().mockResolvedValue(true),
-  onLogAttendance: vi.fn().mockResolvedValue(true),
-  onRefreshLogs: vi.fn().mockResolvedValue(undefined)
+  onUpdateWorkSession: vi.fn().mockResolvedValue(true),
+  onDeleteWorkSession: vi.fn().mockResolvedValue(true),
+  onLoadSummaries: vi.fn().mockResolvedValue(undefined)
 }
 
-const makeLogs = (overrides: Partial<AttendanceLog>[] = []): AttendanceLog[] =>
-  overrides.map((o, i) => ({
-    id: i + 1,
-    eventType: 'clock_in' as const,
-    timestamp: '2024-01-01T09:00:00Z',
-    createdAt: '2024-01-01T09:00:00Z',
+const makeSummaries = (overrides: Partial<DailySummary>[] = []): DailySummary[] =>
+  overrides.map((o) => ({
+    date: '2026-03-01',
+    workedSeconds: 28800,
+    breakSeconds: 0,
+    firstClockIn: '2026-03-01T09:00:00.000Z',
+    lastClockOut: '2026-03-01T17:00:00.000Z',
+    sessionCount: 1,
     ...o
   }))
-
-describe('formatEventType', () => {
-  it('should display "Clock In" for clock_in', () => {
-    render(
-      <AttendanceHistoryPanel
-        logs={makeLogs([{ eventType: 'clock_in' }])}
-        isLoading={false}
-        {...mockProps}
-      />
-    )
-    expect(screen.getAllByText('Clock In').length).toBeGreaterThanOrEqual(1)
-  })
-
-  it('should display "Clock Out" for clock_out', () => {
-    render(
-      <AttendanceHistoryPanel
-        logs={makeLogs([{ eventType: 'clock_out' }])}
-        isLoading={false}
-        {...mockProps}
-      />
-    )
-    expect(screen.getByText('Clock Out')).toBeInTheDocument()
-  })
-
-  it('should display "Break Start" for break_start', () => {
-    render(
-      <AttendanceHistoryPanel
-        logs={makeLogs([{ eventType: 'break_start' }])}
-        isLoading={false}
-        {...mockProps}
-      />
-    )
-    expect(screen.getByText('Break Start')).toBeInTheDocument()
-  })
-
-  it('should display "Break End" for break_end', () => {
-    render(
-      <AttendanceHistoryPanel
-        logs={makeLogs([{ eventType: 'break_end' }])}
-        isLoading={false}
-        {...mockProps}
-      />
-    )
-    expect(screen.getByText('Break End')).toBeInTheDocument()
-  })
-})
 
 describe('loading state', () => {
   it('should display spinner when loading', () => {
     render(
       <AttendanceHistoryPanel
-        logs={[]}
+        dailySummaries={[]}
         isLoading={true}
         {...mockProps}
       />
@@ -81,53 +36,66 @@ describe('loading state', () => {
 })
 
 describe('empty state', () => {
-  it('should show empty message when no logs', () => {
+  it('should show empty message when no summaries', () => {
     render(
       <AttendanceHistoryPanel
-        logs={[]}
+        dailySummaries={[]}
         isLoading={false}
         {...mockProps}
       />
     )
-    expect(screen.getByText('No attendance logs found.')).toBeInTheDocument()
+    expect(screen.getByText('No records found for this month.')).toBeInTheDocument()
   })
 })
 
-describe('log display', () => {
-  it('should display note when present', () => {
+describe('summary display', () => {
+  it('should display worked time for a day', () => {
     render(
       <AttendanceHistoryPanel
-        logs={makeLogs([{ note: 'Remote work' }])}
+        dailySummaries={makeSummaries([{ workedSeconds: 28800 }])}
         isLoading={false}
         {...mockProps}
       />
     )
-    expect(screen.getByText('Remote work')).toBeInTheDocument()
+    expect(screen.getByText('8h 00m')).toBeInTheDocument()
   })
 
-  it('should display "-" when note is absent', () => {
+  it('should display break time when present', () => {
     render(
       <AttendanceHistoryPanel
-        logs={makeLogs([{ note: undefined }])}
+        dailySummaries={makeSummaries([{ breakSeconds: 3600 }])}
         isLoading={false}
         {...mockProps}
       />
     )
-    expect(screen.getByText('-')).toBeInTheDocument()
+    expect(screen.getByText('1h 00m')).toBeInTheDocument()
   })
 
-  it('should render multiple log rows', () => {
+  it('should display dash for no break time', () => {
     render(
       <AttendanceHistoryPanel
-        logs={makeLogs([
-          { eventType: 'clock_in' },
-          { eventType: 'clock_out' }
+        dailySummaries={makeSummaries([{ breakSeconds: 0 }])}
+        isLoading={false}
+        {...mockProps}
+      />
+    )
+    // There should be a '-' in the break column
+    const dashes = screen.getAllByText('-')
+    expect(dashes.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('should render multiple rows', () => {
+    render(
+      <AttendanceHistoryPanel
+        dailySummaries={makeSummaries([
+          { date: '2026-03-01', workedSeconds: 28800 },
+          { date: '2026-03-02', workedSeconds: 18000 }
         ])}
         isLoading={false}
         {...mockProps}
       />
     )
-    expect(screen.getAllByText('Clock In').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText('Clock Out')).toBeInTheDocument()
+    expect(screen.getByText('8h 00m')).toBeInTheDocument()
+    expect(screen.getByText('5h 00m')).toBeInTheDocument()
   })
 })

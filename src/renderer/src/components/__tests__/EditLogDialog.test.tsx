@@ -1,56 +1,44 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { EditLogDialog } from '../EditLogDialog'
-import type { AttendanceLog } from '../../../../shared/attendance'
+import { EditSessionDialog } from '../EditLogDialog'
+import type { DailySummary } from '../../../../shared/attendance'
 
-describe('EditLogDialog', () => {
+describe('EditSessionDialog', () => {
   const mockOnSave = vi.fn().mockResolvedValue(true)
   const mockOnDelete = vi.fn().mockResolvedValue(true)
   const mockOnOpenChange = vi.fn()
 
-  const sampleLog: AttendanceLog = {
-    id: 1,
-    eventType: 'clock_in',
-    timestamp: '2026-03-01T09:00:00.000Z',
-    note: 'test note',
-    createdAt: '2026-03-01T09:00:00.000Z'
+  const sampleSummary: DailySummary = {
+    date: '2026-03-01',
+    workedSeconds: 28800,
+    breakSeconds: 0,
+    firstClockIn: '2026-03-01T09:00:00.000Z',
+    lastClockOut: '2026-03-01T17:00:00.000Z',
+    sessionCount: 1
   }
 
-  it('renders in add mode when log is null', () => {
+  it('renders title and save button when summary is provided', () => {
     render(
-      <EditLogDialog
+      <EditSessionDialog
         open={true}
         onOpenChange={mockOnOpenChange}
-        log={null}
-        onSave={mockOnSave}
-      />
-    )
-    expect(screen.getByText('ログを追加')).toBeInTheDocument()
-    expect(screen.getByText('追加')).toBeInTheDocument()
-  })
-
-  it('renders in edit mode when log is provided', () => {
-    render(
-      <EditLogDialog
-        open={true}
-        onOpenChange={mockOnOpenChange}
-        log={sampleLog}
+        summary={sampleSummary}
         onSave={mockOnSave}
         onDelete={mockOnDelete}
       />
     )
-    expect(screen.getByText('ログを編集')).toBeInTheDocument()
+    expect(screen.getByText('セッションを編集')).toBeInTheDocument()
     expect(screen.getByText('保存')).toBeInTheDocument()
     expect(screen.getByText('削除')).toBeInTheDocument()
   })
 
   it('renders cancel button', () => {
     render(
-      <EditLogDialog
+      <EditSessionDialog
         open={true}
         onOpenChange={mockOnOpenChange}
-        log={null}
+        summary={sampleSummary}
         onSave={mockOnSave}
       />
     )
@@ -60,10 +48,10 @@ describe('EditLogDialog', () => {
   it('calls onOpenChange when cancel is clicked', async () => {
     const user = userEvent.setup()
     render(
-      <EditLogDialog
+      <EditSessionDialog
         open={true}
         onOpenChange={mockOnOpenChange}
-        log={null}
+        summary={sampleSummary}
         onSave={mockOnSave}
       />
     )
@@ -72,14 +60,13 @@ describe('EditLogDialog', () => {
     expect(mockOnOpenChange).toHaveBeenCalledWith(false)
   })
 
-  it('does not render delete button in add mode', () => {
+  it('does not render delete button when onDelete is not provided', () => {
     render(
-      <EditLogDialog
+      <EditSessionDialog
         open={true}
         onOpenChange={mockOnOpenChange}
-        log={null}
+        summary={sampleSummary}
         onSave={mockOnSave}
-        onDelete={mockOnDelete}
       />
     )
     expect(screen.queryByText('削除')).not.toBeInTheDocument()
@@ -87,15 +74,16 @@ describe('EditLogDialog', () => {
 
   it('renders form fields', () => {
     render(
-      <EditLogDialog
+      <EditSessionDialog
         open={true}
         onOpenChange={mockOnOpenChange}
-        log={null}
+        summary={sampleSummary}
         onSave={mockOnSave}
       />
     )
-    expect(screen.getByText('種別')).toBeInTheDocument()
-    expect(screen.getByText('日時')).toBeInTheDocument()
+    expect(screen.getByText('日付')).toBeInTheDocument()
+    expect(screen.getByText('出勤時刻')).toBeInTheDocument()
+    expect(screen.getByText('退勤時刻')).toBeInTheDocument()
     expect(screen.getByText('メモ')).toBeInTheDocument()
   })
 })

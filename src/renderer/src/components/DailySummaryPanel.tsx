@@ -122,6 +122,9 @@ export function DailySummaryPanel({
                     Clock Out
                   </th>
                   <th className="text-left text-sm font-semibold text-muted-foreground px-4 h-12">
+                    Break
+                  </th>
+                  <th className="text-left text-sm font-semibold text-muted-foreground px-4 h-12">
                     Working Hours
                   </th>
                 </tr>
@@ -129,7 +132,7 @@ export function DailySummaryPanel({
               <tbody>
                 {dailySummaries.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="text-center text-muted-foreground h-24 px-4">
+                    <td colSpan={5} className="text-center text-muted-foreground h-24 px-4">
                       No records found for this month.
                     </td>
                   </tr>
@@ -165,6 +168,13 @@ export function DailySummaryPanel({
                           }`}
                         >
                           {day.lastClockOut ? formatTime(day.lastClockOut) : '-'}
+                        </td>
+                        <td
+                          className={`text-sm px-4 h-11 ${
+                            holiday && !hasWork ? 'text-[#A3A3A3]' : 'text-foreground'
+                          }`}
+                        >
+                          {day.breakSeconds > 0 ? formatWorkedTime(day.breakSeconds) : '-'}
                         </td>
                         <td
                           className={`text-sm font-medium px-4 h-11 ${
