@@ -85,21 +85,10 @@ describe('AttendanceApp', () => {
     })
   })
 
-  it('should load daily summaries when switching to attendance history tab', async () => {
+  it('should switch between tabs', async () => {
     render(<AttendanceApp />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Attendance History' }))
-
-    await waitFor(() => {
-      // "Attendance History" appears in both sidebar (sr-only) and panel heading
-      expect(screen.getAllByText('Attendance History').length).toBeGreaterThanOrEqual(2)
-    })
-  })
-
-  it('should switch back to attendance panel when attendance tab is clicked', async () => {
-    render(<AttendanceApp />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Attendance History' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Daily Summary' }))
     fireEvent.click(screen.getByRole('button', { name: 'Attendance' }))
 
     await waitFor(() => {

@@ -1,4 +1,4 @@
-import { Timer, Calendar, BarChart3, TrendingUp } from 'lucide-react'
+import { Timer, BarChart3, TrendingUp } from 'lucide-react'
 import iconImage from '../assets/icon.png'
 import { Button } from '../components/ui/button'
 import { TabType } from '../types'
@@ -25,15 +25,6 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         >
           <Timer className="h-5 w-5" />
           <span className="sr-only">Attendance</span>
-        </Button>
-        <Button
-          variant={activeTab === 'attendance-history' ? 'secondary' : 'ghost'}
-          size="icon"
-          className="w-12 h-12"
-          onClick={() => onTabChange('attendance-history')}
-        >
-          <Calendar className="h-5 w-5" />
-          <span className="sr-only">Attendance History</span>
         </Button>
         <Button
           variant={activeTab === 'daily-summary' ? 'secondary' : 'ghost'}

@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Header } from './components/Header'
 import { AttendancePanel } from './components/AttendancePanel'
-import { AttendanceHistoryPanel } from './components/AttendanceHistoryPanel'
 import { DailySummaryPanel } from './components/DailySummaryPanel'
 import { MonthlySummaryPanel } from './components/MonthlySummaryPanel'
 import { useAttendance } from './hooks/useAttendance'
@@ -29,14 +28,6 @@ export default function AttendanceApp() {
               onEndBreak={() => attendance.endBreak()}
               onRefreshSummary={attendance.loadTodaySummary}
               error={attendance.error}
-            />
-          ) : activeTab === 'attendance-history' ? (
-            <AttendanceHistoryPanel
-              dailySummaries={attendance.dailySummaries}
-              isLoading={attendance.isLoading}
-              onUpdateWorkSession={attendance.updateWorkSession}
-              onDeleteWorkSession={attendance.deleteWorkSession}
-              onLoadSummaries={attendance.loadDailySummaries}
             />
           ) : activeTab === 'daily-summary' ? (
             <DailySummaryPanel
