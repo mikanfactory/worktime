@@ -2354,6 +2354,605 @@
           ]
         }
       ]
+    },
+    {
+      "type": "frame",
+      "id": "cpvfn",
+      "x": 0,
+      "y": 1940,
+      "name": "Screen - Working (with Break)",
+      "width": 1200,
+      "height": 870,
+      "fill": "$bg-white",
+      "children": [
+        {
+          "id": "ckYvA",
+          "type": "ref",
+          "ref": "BP4TJ",
+          "height": "fill_container",
+          "name": "sb1"
+        },
+        {
+          "type": "frame",
+          "id": "WvWlV",
+          "name": "RightPanel",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "children": [
+            {
+              "id": "qv8XN",
+              "type": "ref",
+              "ref": "Q1RTj",
+              "name": "hd1"
+            },
+            {
+              "type": "frame",
+              "id": "qTqtL",
+              "name": "MainContent",
+              "width": "fill_container",
+              "height": "fill_container",
+              "layout": "vertical",
+              "gap": 32,
+              "padding": 48,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "TZvZK",
+                  "name": "timerLabel",
+                  "fill": "$muted-text",
+                  "content": "Elapsed Time",
+                  "fontFamily": "Inter",
+                  "fontSize": 14,
+                  "fontWeight": "500"
+                },
+                {
+                  "type": "text",
+                  "id": "RL4d6",
+                  "name": "timerValue",
+                  "fill": "$timer-text",
+                  "content": "08:32:15",
+                  "fontFamily": "Inter",
+                  "fontSize": 56,
+                  "fontWeight": "700",
+                  "letterSpacing": 2
+                },
+                {
+                  "type": "frame",
+                  "id": "CdXiW",
+                  "name": "ButtonRow",
+                  "gap": 24,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "f6rFx",
+                      "name": "ClockInBtn",
+                      "width": 120,
+                      "height": 120,
+                      "fill": "$clock-in",
+                      "cornerRadius": 60,
+                      "layout": "vertical",
+                      "gap": 8,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "VqQJB",
+                          "name": "clockInIcon",
+                          "width": 32,
+                          "height": 32,
+                          "iconFontName": "play",
+                          "iconFontFamily": "lucide",
+                          "fill": "#FFFFFF"
+                        },
+                        {
+                          "type": "text",
+                          "id": "RTnnW",
+                          "name": "clockInText",
+                          "fill": "#FFFFFF",
+                          "content": "Clock In",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "QG3ur",
+                      "name": "ClockOutBtn",
+                      "width": 120,
+                      "height": 120,
+                      "fill": "$clock-out",
+                      "cornerRadius": 60,
+                      "layout": "vertical",
+                      "gap": 8,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "JCun9",
+                          "name": "clockOutIcon",
+                          "width": 32,
+                          "height": 32,
+                          "iconFontName": "log-out",
+                          "iconFontFamily": "lucide",
+                          "fill": "#FFFFFF"
+                        },
+                        {
+                          "type": "text",
+                          "id": "Y42Js",
+                          "name": "clockOutText",
+                          "fill": "#FFFFFF",
+                          "content": "Clock Out",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "2c1Wo",
+                  "name": "BreakBtn",
+                  "width": 160,
+                  "height": 44,
+                  "fill": "$break",
+                  "cornerRadius": 22,
+                  "gap": 8,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "Lu9rq",
+                      "name": "breakIcon",
+                      "width": 18,
+                      "height": 18,
+                      "iconFontName": "coffee",
+                      "iconFontFamily": "lucide",
+                      "fill": "#FFFFFF"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Ap03Y",
+                      "name": "breakText",
+                      "fill": "#FFFFFF",
+                      "content": "Break",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "FnvoQ",
+                  "name": "StatusInfo",
+                  "width": "fill_container",
+                  "gap": 48,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "eIirk",
+                      "name": "StatusItem",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "bLfwH",
+                          "name": "statusLabel",
+                          "fill": "$muted-text",
+                          "content": "Status",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "PGYw5",
+                          "name": "statusValue",
+                          "fill": "$clock-in",
+                          "content": "Working",
+                          "fontFamily": "Inter",
+                          "fontSize": 16,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Irtg7",
+                      "name": "StatusItem",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "qKaxA",
+                          "name": "clockInLabel",
+                          "fill": "$muted-text",
+                          "content": "Clock In",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "XGZ6u",
+                          "name": "clockInValue",
+                          "fill": "$fg-text",
+                          "content": "09:00",
+                          "fontFamily": "Inter",
+                          "fontSize": 16,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "92SUC",
+                      "name": "StatusItem",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "oVEQY",
+                          "name": "todayLabel",
+                          "fill": "$muted-text",
+                          "content": "Today",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "jHOX2",
+                          "name": "todayValue",
+                          "fill": "$fg-text",
+                          "content": "2026/03/04 (Wed)",
+                          "fontFamily": "Inter",
+                          "fontSize": 16,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "uGiJk",
+      "x": 0,
+      "y": 2910,
+      "name": "Screen - On Break",
+      "width": 1200,
+      "height": 870,
+      "fill": "$bg-white",
+      "children": [
+        {
+          "id": "03sxq",
+          "type": "ref",
+          "ref": "BP4TJ",
+          "height": "fill_container",
+          "name": "sb1"
+        },
+        {
+          "type": "frame",
+          "id": "PFxs0",
+          "name": "RightPanel",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "children": [
+            {
+              "id": "IVjOo",
+              "type": "ref",
+              "ref": "Q1RTj",
+              "name": "hd1"
+            },
+            {
+              "type": "frame",
+              "id": "pFayV",
+              "name": "MainContent",
+              "width": "fill_container",
+              "height": "fill_container",
+              "layout": "vertical",
+              "gap": 32,
+              "padding": 48,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "GN6rG",
+                  "name": "timerLabel",
+                  "fill": "$muted-text",
+                  "content": "Elapsed Time",
+                  "fontFamily": "Inter",
+                  "fontSize": 14,
+                  "fontWeight": "500"
+                },
+                {
+                  "type": "text",
+                  "id": "5s1Ri",
+                  "name": "timerValue",
+                  "fill": "$timer-text",
+                  "content": "08:32:15",
+                  "fontFamily": "Inter",
+                  "fontSize": 56,
+                  "fontWeight": "700",
+                  "letterSpacing": 2
+                },
+                {
+                  "type": "frame",
+                  "id": "9CKqR",
+                  "name": "ButtonRow",
+                  "gap": 24,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "J998I",
+                      "name": "ClockInBtn",
+                      "opacity": 0.4,
+                      "width": 120,
+                      "height": 120,
+                      "fill": "$clock-in",
+                      "cornerRadius": 60,
+                      "layout": "vertical",
+                      "gap": 8,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "WQ0Bq",
+                          "name": "clockInIcon",
+                          "width": 32,
+                          "height": 32,
+                          "iconFontName": "play",
+                          "iconFontFamily": "lucide",
+                          "fill": "#FFFFFF"
+                        },
+                        {
+                          "type": "text",
+                          "id": "bz8I1",
+                          "name": "clockInText",
+                          "fill": "#FFFFFF",
+                          "content": "Clock In",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "2Lu9f",
+                      "name": "ClockOutBtn",
+                      "width": 120,
+                      "height": 120,
+                      "fill": "$clock-out",
+                      "cornerRadius": 60,
+                      "layout": "vertical",
+                      "gap": 8,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "lztuB",
+                          "name": "clockOutIcon",
+                          "width": 32,
+                          "height": 32,
+                          "iconFontName": "log-out",
+                          "iconFontFamily": "lucide",
+                          "fill": "#FFFFFF"
+                        },
+                        {
+                          "type": "text",
+                          "id": "aTeOA",
+                          "name": "clockOutText",
+                          "fill": "#FFFFFF",
+                          "content": "Clock Out",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "jMvGO",
+                  "name": "ResumeBtn",
+                  "width": 160,
+                  "height": 44,
+                  "fill": "$clock-in",
+                  "cornerRadius": 22,
+                  "gap": 8,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "YyP9f",
+                      "name": "breakIcon",
+                      "width": 18,
+                      "height": 18,
+                      "iconFontName": "play",
+                      "iconFontFamily": "lucide",
+                      "fill": "#FFFFFF"
+                    },
+                    {
+                      "type": "text",
+                      "id": "EpTFu",
+                      "name": "breakText",
+                      "fill": "#FFFFFF",
+                      "content": "Resume",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "bfJux",
+                  "name": "StatusInfo",
+                  "width": "fill_container",
+                  "gap": 48,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "ONPIl",
+                      "name": "StatusItem",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "3g7cf",
+                          "name": "statusLabel",
+                          "fill": "$muted-text",
+                          "content": "Status",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "OE8LC",
+                          "name": "statusValue",
+                          "fill": "$break",
+                          "content": "On Break",
+                          "fontFamily": "Inter",
+                          "fontSize": 16,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "NvfdF",
+                      "name": "StatusItem",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "jJL86",
+                          "name": "clockInLabel",
+                          "fill": "$muted-text",
+                          "content": "Clock In",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "PGkPJ",
+                          "name": "clockInValue",
+                          "fill": "$fg-text",
+                          "content": "09:00",
+                          "fontFamily": "Inter",
+                          "fontSize": 16,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "btvSW",
+                      "name": "StatusItem",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "BW247",
+                          "name": "todayLabel",
+                          "fill": "$muted-text",
+                          "content": "Today",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "AFoUj",
+                          "name": "todayValue",
+                          "fill": "$fg-text",
+                          "content": "2026/03/04 (Wed)",
+                          "fontFamily": "Inter",
+                          "fontSize": 16,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "tbtC8",
+                      "name": "StatusItem",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "2k6Jc",
+                          "name": "breakTimeLabel",
+                          "fill": "$muted-text",
+                          "content": "Break",
+                          "fontFamily": "Inter",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "CfM3v",
+                          "name": "breakTimeValue",
+                          "fill": "$break",
+                          "content": "00:15:30",
+                          "fontFamily": "Inter",
+                          "fontSize": 16,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
     }
   ],
   "variables": {
@@ -2427,6 +3026,10 @@
     "nav-hover": {
       "type": "color",
       "value": "#EBEBEB"
+    },
+    "break": {
+      "type": "color",
+      "value": "#F59E0B"
     }
   }
 }
