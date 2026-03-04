@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
+  CreateManualWorkSessionRequest,
   DeleteWorkSessionRequest,
   GetDailySummariesRequest,
   GetMonthlySummaryRequest,
@@ -21,6 +22,8 @@ const api = {
     ipcRenderer.invoke('attendance:updateWorkSession', request),
   deleteWorkSession: (request: DeleteWorkSessionRequest) =>
     ipcRenderer.invoke('attendance:deleteWorkSession', request),
+  createManualWorkSession: (request: CreateManualWorkSessionRequest) =>
+    ipcRenderer.invoke('attendance:createManualWorkSession', request),
   getDailySummaries: (request: GetDailySummariesRequest) =>
     ipcRenderer.invoke('attendance:getDailySummaries', request),
   getMonthlySummary: (request: GetMonthlySummaryRequest) =>

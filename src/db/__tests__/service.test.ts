@@ -14,6 +14,7 @@ import {
   getTodaySummary,
   updateWorkSession,
   deleteWorkSession,
+  createManualWorkSession,
   getDailySummaries,
   getMonthlySummary
 } from '../service'
@@ -552,6 +553,58 @@ describe('deleteWorkSession', () => {
     await expect(deleteWorkSession(999)).rejects.toThrow(
       'Record to delete does not exist'
     )
+  })
+})
+
+describe('createManualWorkSession', () => {
+  it('creates a closed session with both clockIn and clockOut', async () => {
+    const now = new Date()
+    mockCreate.mockResolvedValue({
+      id: 5,
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z',
+      note: null,
+      createdAt: now,
+      updatedAt: now,
+      breaks: []
+    })
+
+    const result = await createManualWorkSession(
+      '2026-03-01',
+      '2026-03-01T09:00:00.000Z',
+      '2026-03-01T17:00:00.000Z'
+    )
+    expect(result.id).toBe(5)
+    expect(result.clockOutAt).toBe('2026-03-01T17:00:00.000Z')
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: {
+        date: '2026-03-01',
+        clockInAt: '2026-03-01T09:00:00.000Z',
+        clockOutAt: '2026-03-01T17:00:00.000Z'
+      },
+      include: { breaks: true }
+    })
+  })
+
+  it('throws if clockOutAt is before clockInAt', async () => {
+    await expect(
+      createManualWorkSession(
+        '2026-03-01',
+        '2026-03-01T17:00:00.000Z',
+        '2026-03-01T09:00:00.000Z'
+      )
+    ).rejects.toThrow('clockOutAt must be after clockInAt')
+  })
+
+  it('throws if clockOutAt equals clockInAt', async () => {
+    await expect(
+      createManualWorkSession(
+        '2026-03-01',
+        '2026-03-01T09:00:00.000Z',
+        '2026-03-01T09:00:00.000Z'
+      )
+    ).rejects.toThrow('clockOutAt must be after clockInAt')
   })
 })
 

@@ -3,6 +3,7 @@ import type {
   WorkSession,
   BreakSession,
   AttendanceSummary,
+  CreateManualWorkSessionRequest,
   DailySummary,
   DeleteWorkSessionRequest,
   GetDailySummariesRequest,
@@ -23,6 +24,7 @@ type AttendanceApi = {
   getTodaySummary: (request?: GetTodaySummaryRequest) => Promise<Result<AttendanceSummary>>
   updateWorkSession: (request: UpdateWorkSessionRequest) => Promise<Result<WorkSession>>
   deleteWorkSession: (request: DeleteWorkSessionRequest) => Promise<Result<void>>
+  createManualWorkSession: (request: CreateManualWorkSessionRequest) => Promise<Result<WorkSession>>
   getDailySummaries: (request: GetDailySummariesRequest) => Promise<Result<DailySummary[]>>
   getMonthlySummary: (request: GetMonthlySummaryRequest) => Promise<Result<MonthlySummary>>
 }
@@ -44,6 +46,7 @@ interface UseAttendanceResult {
   loadMonthlySummary: (yearMonth: string) => Promise<void>
   updateWorkSession: (request: UpdateWorkSessionRequest) => Promise<boolean>
   deleteWorkSession: (id: number) => Promise<boolean>
+  createManualWorkSession: (request: CreateManualWorkSessionRequest) => Promise<boolean>
 }
 
 function getAttendanceApi(): AttendanceApi | undefined {
@@ -72,6 +75,8 @@ function getAttendanceApi(): AttendanceApi | undefined {
       invoke('attendance:updateWorkSession', request),
     deleteWorkSession: (request: DeleteWorkSessionRequest) =>
       invoke('attendance:deleteWorkSession', request),
+    createManualWorkSession: (request: CreateManualWorkSessionRequest) =>
+      invoke('attendance:createManualWorkSession', request),
     getDailySummaries: (request: GetDailySummariesRequest) =>
       invoke('attendance:getDailySummaries', request),
     getMonthlySummary: (request: GetMonthlySummaryRequest) =>
@@ -314,6 +319,29 @@ export function useAttendance(): UseAttendanceResult {
     }
   }, [])
 
+  const createManualWorkSession = useCallback(async (request: CreateManualWorkSessionRequest) => {
+    setError(null)
+
+    const attendanceApi = getAttendanceApi()
+    if (!attendanceApi) {
+      setError('IPC bridge is not available')
+      return false
+    }
+
+    try {
+      const result = await attendanceApi.createManualWorkSession(request)
+      if (result.ok) {
+        return true
+      }
+
+      setError(result.message)
+      return false
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+      return false
+    }
+  }, [])
+
   const deleteWorkSession = useCallback(async (id: number) => {
     setError(null)
 
@@ -353,6 +381,7 @@ export function useAttendance(): UseAttendanceResult {
     loadDailySummaries,
     loadMonthlySummary,
     updateWorkSession,
-    deleteWorkSession
+    deleteWorkSession,
+    createManualWorkSession
   }
 }

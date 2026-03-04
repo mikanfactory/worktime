@@ -19,6 +19,7 @@ vi.mock('../../../db/service', () => ({
   getTodaySummary: vi.fn(),
   updateWorkSession: vi.fn(),
   deleteWorkSession: vi.fn(),
+  createManualWorkSession: vi.fn(),
   getDailySummaries: vi.fn(),
   getMonthlySummary: vi.fn()
 }))
@@ -61,6 +62,14 @@ beforeEach(() => {
   vi.spyOn(attendanceService, 'getTodaySummary').mockResolvedValue({
     ok: true,
     data: { workedSeconds: 0, breakSeconds: 0, isWorking: false, isOnBreak: false }
+  })
+  vi.spyOn(attendanceService, 'createManualWorkSession').mockResolvedValue({
+    ok: true,
+    data: {
+      id: 5, date: '2026-03-01', clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z',
+      breaks: [], createdAt: '2026-03-01T09:00:00.000Z', updatedAt: '2026-03-01T17:00:00.000Z'
+    }
   })
 
   service = new IpcHandlerService(attendanceService)
@@ -224,6 +233,72 @@ describe('attendance:deleteWorkSession', () => {
 
   it('accepts valid delete request', async () => {
     const result = await invoke({ id: 1 })
+    expect(result).toBeDefined()
+  })
+})
+
+describe('attendance:createManualWorkSession', () => {
+  const invoke = (payload: unknown) =>
+    handlers['attendance:createManualWorkSession'](null, payload)
+
+  it('rejects non-object payload', async () => {
+    const result = await invoke('invalid')
+    expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
+  })
+
+  it('rejects invalid date format', async () => {
+    const result = await invoke({
+      date: '2026-3-1',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z'
+    })
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'VALIDATION_ERROR',
+      message: 'date must match YYYY-MM-DD format'
+    })
+  })
+
+  it('rejects missing date', async () => {
+    const result = await invoke({
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z'
+    })
+    expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
+  })
+
+  it('rejects invalid clockInAt', async () => {
+    const result = await invoke({
+      date: '2026-03-01',
+      clockInAt: 'not-a-date',
+      clockOutAt: '2026-03-01T17:00:00.000Z'
+    })
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'VALIDATION_ERROR',
+      message: 'clockInAt must be a valid ISO8601 string'
+    })
+  })
+
+  it('rejects invalid clockOutAt', async () => {
+    const result = await invoke({
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: 'not-a-date'
+    })
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'VALIDATION_ERROR',
+      message: 'clockOutAt must be a valid ISO8601 string'
+    })
+  })
+
+  it('accepts valid request', async () => {
+    const result = await invoke({
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z'
+    })
     expect(result).toBeDefined()
   })
 })

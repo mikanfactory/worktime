@@ -5,6 +5,7 @@ import type {
   WorkSession,
   BreakSession,
   AttendanceSummary,
+  CreateManualWorkSessionRequest,
   DailySummary,
   MonthlySummary,
   GetTodaySummaryRequest,
@@ -23,6 +24,7 @@ type MockApi = {
   getTodaySummary: ReturnType<typeof vi.fn<(req?: GetTodaySummaryRequest) => Promise<Result<AttendanceSummary>>>>
   updateWorkSession: ReturnType<typeof vi.fn<(req: UpdateWorkSessionRequest) => Promise<Result<WorkSession>>>>
   deleteWorkSession: ReturnType<typeof vi.fn<(req: DeleteWorkSessionRequest) => Promise<Result<void>>>>
+  createManualWorkSession: ReturnType<typeof vi.fn<(req: CreateManualWorkSessionRequest) => Promise<Result<WorkSession>>>>
   getDailySummaries: ReturnType<typeof vi.fn<(req: GetDailySummariesRequest) => Promise<Result<DailySummary[]>>>>
   getMonthlySummary: ReturnType<typeof vi.fn<(req: GetMonthlySummaryRequest) => Promise<Result<MonthlySummary>>>>
 }
@@ -38,6 +40,7 @@ beforeEach(() => {
     getTodaySummary: vi.fn(),
     updateWorkSession: vi.fn(),
     deleteWorkSession: vi.fn(),
+    createManualWorkSession: vi.fn(),
     getDailySummaries: vi.fn(),
     getMonthlySummary: vi.fn()
   }
@@ -385,6 +388,54 @@ describe('deleteWorkSession', () => {
     })
 
     expect(success).toBe(true)
+  })
+})
+
+describe('createManualWorkSession', () => {
+  it('returns true on success', async () => {
+    mockApi.createManualWorkSession.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 5, date: '2026-03-01', clockInAt: '2026-03-01T09:00:00Z',
+        clockOutAt: '2026-03-01T17:00:00Z',
+        breaks: [], createdAt: '2026-03-01T09:00:00Z', updatedAt: '2026-03-01T17:00:00Z'
+      }
+    })
+
+    const { result } = renderHook(() => useAttendance())
+    let success = false
+
+    await act(async () => {
+      success = await result.current.createManualWorkSession({
+        date: '2026-03-01',
+        clockInAt: '2026-03-01T09:00:00Z',
+        clockOutAt: '2026-03-01T17:00:00Z'
+      })
+    })
+
+    expect(success).toBe(true)
+  })
+
+  it('returns false on failure', async () => {
+    mockApi.createManualWorkSession.mockResolvedValue({
+      ok: false,
+      code: 'DB_ERROR',
+      message: 'clockOutAt must be after clockInAt'
+    })
+
+    const { result } = renderHook(() => useAttendance())
+    let success = true
+
+    await act(async () => {
+      success = await result.current.createManualWorkSession({
+        date: '2026-03-01',
+        clockInAt: '2026-03-01T17:00:00Z',
+        clockOutAt: '2026-03-01T09:00:00Z'
+      })
+    })
+
+    expect(success).toBe(false)
+    expect(result.current.error).toBe('clockOutAt must be after clockInAt')
   })
 })
 

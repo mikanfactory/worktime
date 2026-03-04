@@ -76,3 +76,9 @@ export interface GetDailySummariesRequest {
 export interface GetMonthlySummaryRequest {
   yearMonth: string // YYYY-MM
 }
+
+export interface CreateManualWorkSessionRequest {
+  date: string // YYYY-MM-DD
+  clockInAt: string // ISO8601
+  clockOutAt: string // ISO8601
+}

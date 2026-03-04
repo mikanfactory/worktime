@@ -23,6 +23,7 @@ type MockApi = {
   getTodaySummary: ReturnType<typeof vi.fn<(req?: GetTodaySummaryRequest) => Promise<Result<AttendanceSummary>>>>
   updateWorkSession: ReturnType<typeof vi.fn<(req: UpdateWorkSessionRequest) => Promise<Result<WorkSession>>>>
   deleteWorkSession: ReturnType<typeof vi.fn<(req: DeleteWorkSessionRequest) => Promise<Result<void>>>>
+  createManualWorkSession: ReturnType<typeof vi.fn<(req: { date: string; clockInAt: string; clockOutAt: string }) => Promise<Result<WorkSession>>>>
   getDailySummaries: ReturnType<typeof vi.fn<(req: GetDailySummariesRequest) => Promise<Result<DailySummary[]>>>>
   getMonthlySummary: ReturnType<typeof vi.fn<(req: GetMonthlySummaryRequest) => Promise<Result<MonthlySummary>>>>
 }
@@ -61,6 +62,7 @@ beforeEach(() => {
     }),
     updateWorkSession: vi.fn().mockResolvedValue({ ok: true, data: {} }),
     deleteWorkSession: vi.fn().mockResolvedValue({ ok: true, data: undefined }),
+    createManualWorkSession: vi.fn().mockResolvedValue({ ok: true, data: {} }),
     getDailySummaries: vi.fn().mockResolvedValue({ ok: true, data: [] }),
     getMonthlySummary: vi.fn().mockResolvedValue({
       ok: true,

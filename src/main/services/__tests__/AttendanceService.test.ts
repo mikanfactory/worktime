@@ -9,6 +9,7 @@ vi.mock('../../../db/service', () => ({
   getTodaySummary: vi.fn(),
   updateWorkSession: vi.fn(),
   deleteWorkSession: vi.fn(),
+  createManualWorkSession: vi.fn(),
   getDailySummaries: vi.fn(),
   getMonthlySummary: vi.fn()
 }))
@@ -262,6 +263,47 @@ describe('deleteWorkSession', () => {
 
     const result = await service.deleteWorkSession({ id: 999 })
     expect(result.ok).toBe(false)
+  })
+})
+
+describe('createManualWorkSession', () => {
+  it('returns ok result on success', async () => {
+    const session = {
+      id: 5,
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z',
+      breaks: [],
+      createdAt: '2026-03-01T09:00:00.000Z',
+      updatedAt: '2026-03-01T17:00:00.000Z'
+    }
+    mockedDb.createManualWorkSession.mockResolvedValue(session)
+
+    const result = await service.createManualWorkSession({
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z'
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.data.id).toBe(5)
+    }
+  })
+
+  it('returns error result on DB failure', async () => {
+    mockedDb.createManualWorkSession.mockRejectedValue(
+      new Error('clockOutAt must be after clockInAt')
+    )
+
+    const result = await service.createManualWorkSession({
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T17:00:00.000Z',
+      clockOutAt: '2026-03-01T09:00:00.000Z'
+    })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.code).toBe('DB_ERROR')
+    }
   })
 })
 

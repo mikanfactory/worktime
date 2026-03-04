@@ -10,7 +10,8 @@ import type {
   MonthlySummary,
   Result,
   UpdateWorkSessionRequest,
-  DeleteWorkSessionRequest
+  DeleteWorkSessionRequest,
+  CreateManualWorkSessionRequest
 } from '../../shared/attendance'
 
 export class AttendanceService {
@@ -114,6 +115,20 @@ export class AttendanceService {
       return { ok: true, data: undefined }
     } catch (error) {
       console.error('Error deleting work session:', error)
+      return {
+        ok: false,
+        code: 'DB_ERROR',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  async createManualWorkSession(request: CreateManualWorkSessionRequest): Promise<Result<WorkSession>> {
+    try {
+      const session = await db.createManualWorkSession(request.date, request.clockInAt, request.clockOutAt)
+      return { ok: true, data: session }
+    } catch (error) {
+      console.error('Error creating manual work session:', error)
       return {
         ok: false,
         code: 'DB_ERROR',

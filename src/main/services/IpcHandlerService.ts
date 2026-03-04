@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { AttendanceService } from './AttendanceService'
 import type {
+  CreateManualWorkSessionRequest,
   DeleteWorkSessionRequest,
   GetDailySummariesRequest,
   GetMonthlySummaryRequest,
@@ -10,6 +11,7 @@ import type {
 } from '../../shared/attendance'
 
 const YEAR_MONTH_PATTERN = /^\d{4}-\d{2}$/
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 export class IpcHandlerService {
   constructor(private attendanceService: AttendanceService) {}
@@ -51,6 +53,12 @@ export class IpcHandlerService {
       const validated = this.validateDeleteWorkSessionRequest(payload)
       if (!validated.ok) return validated
       return await this.attendanceService.deleteWorkSession(validated.data)
+    })
+
+    ipcMain.handle('attendance:createManualWorkSession', async (_, payload: unknown) => {
+      const validated = this.validateCreateManualWorkSessionRequest(payload)
+      if (!validated.ok) return validated
+      return await this.attendanceService.createManualWorkSession(validated.data)
     })
 
     ipcMain.handle('attendance:getDailySummaries', async (_, payload: unknown) => {
@@ -155,6 +163,37 @@ export class IpcHandlerService {
     }
 
     return { ok: true, data: { id: id as number } }
+  }
+
+  private validateCreateManualWorkSessionRequest(
+    payload: unknown
+  ): Result<CreateManualWorkSessionRequest> {
+    if (!this.isRecord(payload)) {
+      return this.validationError('attendance:createManualWorkSession payload must be an object')
+    }
+
+    const { date, clockInAt, clockOutAt } = payload
+
+    if (typeof date !== 'string' || !DATE_PATTERN.test(date)) {
+      return this.validationError('date must match YYYY-MM-DD format')
+    }
+
+    if (!this.isIsoDateString(clockInAt)) {
+      return this.validationError('clockInAt must be a valid ISO8601 string')
+    }
+
+    if (!this.isIsoDateString(clockOutAt)) {
+      return this.validationError('clockOutAt must be a valid ISO8601 string')
+    }
+
+    return {
+      ok: true,
+      data: {
+        date: date as string,
+        clockInAt: clockInAt as string,
+        clockOutAt: clockOutAt as string
+      }
+    }
   }
 
   private validateYearMonthRequest(

@@ -308,6 +308,29 @@ export async function deleteWorkSession(id: number): Promise<void> {
   await prisma.workSession.delete({ where: { id } });
 }
 
+export async function createManualWorkSession(
+  date: string,
+  clockInAt: string,
+  clockOutAt: string,
+): Promise<WorkSession> {
+  if (clockOutAt <= clockInAt) {
+    throw new Error("clockOutAt must be after clockInAt.");
+  }
+
+  const prisma = getPrismaClient();
+
+  const row = await prisma.workSession.create({
+    data: {
+      date,
+      clockInAt,
+      clockOutAt,
+    },
+    include: { breaks: true },
+  });
+
+  return toWorkSession(row);
+}
+
 export async function getDailySummaries(
   yearMonth: string,
 ): Promise<DailySummary[]> {
