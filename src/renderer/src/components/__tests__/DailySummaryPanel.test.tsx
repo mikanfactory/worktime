@@ -32,7 +32,7 @@ describe('DailySummaryPanel', () => {
         onLoadSummaries={mockLoadSummaries}
       />
     )
-    expect(screen.getByText('日次集計')).toBeInTheDocument()
+    expect(screen.getByText('Daily Summary')).toBeInTheDocument()
   })
 
   it('shows loading spinner when loading', () => {
@@ -43,7 +43,7 @@ describe('DailySummaryPanel', () => {
         onLoadSummaries={mockLoadSummaries}
       />
     )
-    expect(screen.queryByText('日次集計')).toBeInTheDocument()
+    expect(screen.getByText('Daily Summary')).toBeInTheDocument()
   })
 
   it('shows empty message when no data', () => {
@@ -54,7 +54,7 @@ describe('DailySummaryPanel', () => {
         onLoadSummaries={mockLoadSummaries}
       />
     )
-    expect(screen.getByText('この月の勤務記録はありません。')).toBeInTheDocument()
+    expect(screen.getByText('No records found for this month.')).toBeInTheDocument()
   })
 
   it('renders daily summaries', () => {
@@ -65,9 +65,9 @@ describe('DailySummaryPanel', () => {
         onLoadSummaries={mockLoadSummaries}
       />
     )
-    // Check worked time is displayed (08:00 for 28800 seconds)
-    expect(screen.getByText('08:00')).toBeInTheDocument()
-    expect(screen.getByText('05:00')).toBeInTheDocument()
+    // Check worked time is displayed (8h 00m for 28800 seconds, 5h 00m for 18000 seconds)
+    expect(screen.getByText('8h 00m')).toBeInTheDocument()
+    expect(screen.getByText('5h 00m')).toBeInTheDocument()
   })
 
   it('navigates months with buttons', async () => {

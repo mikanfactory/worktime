@@ -50,6 +50,7 @@ export default function AttendanceApp() {
                 return false
               }}
               onRefreshLogs={() => attendance.loadLogs({ limit: 50 })}
+              onLoadLogs={attendance.loadLogs}
             />
           ) : activeTab === 'daily-summary' ? (
             <DailySummaryPanel

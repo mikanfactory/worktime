@@ -1,4 +1,4 @@
-import { Clock, Calendar, BarChart3, CalendarDays } from 'lucide-react'
+import { Timer, Calendar, BarChart3, TrendingUp } from 'lucide-react'
 import iconImage from '../assets/icon.png'
 import { Button } from '../components/ui/button'
 import { TabType } from '../types'
@@ -23,7 +23,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           className="w-12 h-12"
           onClick={() => onTabChange('attendance')}
         >
-          <Clock className="h-5 w-5" />
+          <Timer className="h-5 w-5" />
           <span className="sr-only">Attendance</span>
         </Button>
         <Button
@@ -50,7 +50,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           className="w-12 h-12"
           onClick={() => onTabChange('monthly-summary')}
         >
-          <CalendarDays className="h-5 w-5" />
+          <TrendingUp className="h-5 w-5" />
           <span className="sr-only">Monthly Summary</span>
         </Button>
       </nav>

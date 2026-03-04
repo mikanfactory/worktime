@@ -1,7 +1,14 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { AttendanceHistoryPanel } from '../AttendanceHistoryPanel'
 import type { AttendanceLog } from '../../../../shared/attendance'
+
+const mockProps = {
+  onUpdateLog: vi.fn().mockResolvedValue(true),
+  onDeleteLog: vi.fn().mockResolvedValue(true),
+  onLogAttendance: vi.fn().mockResolvedValue(true),
+  onRefreshLogs: vi.fn().mockResolvedValue(undefined)
+}
 
 const makeLogs = (overrides: Partial<AttendanceLog>[] = []): AttendanceLog[] =>
   overrides.map((o, i) => ({
@@ -13,52 +20,61 @@ const makeLogs = (overrides: Partial<AttendanceLog>[] = []): AttendanceLog[] =>
   }))
 
 describe('formatEventType', () => {
-  it('should display "打刻" for clock_in', () => {
+  it('should display "Clock In" for clock_in', () => {
     render(
       <AttendanceHistoryPanel
         logs={makeLogs([{ eventType: 'clock_in' }])}
         isLoading={false}
+        {...mockProps}
       />
     )
-    expect(screen.getByText('打刻')).toBeInTheDocument()
+    expect(screen.getAllByText('Clock In').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('should display "退勤" for clock_out', () => {
+  it('should display "Clock Out" for clock_out', () => {
     render(
       <AttendanceHistoryPanel
         logs={makeLogs([{ eventType: 'clock_out' }])}
         isLoading={false}
+        {...mockProps}
       />
     )
-    expect(screen.getByText('退勤')).toBeInTheDocument()
+    expect(screen.getByText('Clock Out')).toBeInTheDocument()
   })
 
-  it('should display "休憩開始" for break_start', () => {
+  it('should display "Break Start" for break_start', () => {
     render(
       <AttendanceHistoryPanel
         logs={makeLogs([{ eventType: 'break_start' }])}
         isLoading={false}
+        {...mockProps}
       />
     )
-    expect(screen.getByText('休憩開始')).toBeInTheDocument()
+    expect(screen.getByText('Break Start')).toBeInTheDocument()
   })
 
-  it('should display "休憩終了" for break_end', () => {
+  it('should display "Break End" for break_end', () => {
     render(
       <AttendanceHistoryPanel
         logs={makeLogs([{ eventType: 'break_end' }])}
         isLoading={false}
+        {...mockProps}
       />
     )
-    expect(screen.getByText('休憩終了')).toBeInTheDocument()
+    expect(screen.getByText('Break End')).toBeInTheDocument()
   })
 })
 
 describe('loading state', () => {
   it('should display spinner when loading', () => {
-    render(<AttendanceHistoryPanel logs={[]} isLoading={true} />)
-    expect(screen.getByRole('heading', { name: 'Attendance History' })).toBeInTheDocument()
-    // Loader2 has animate-spin class
+    render(
+      <AttendanceHistoryPanel
+        logs={[]}
+        isLoading={true}
+        {...mockProps}
+      />
+    )
+    expect(screen.getByText('Attendance History')).toBeInTheDocument()
     const spinner = document.querySelector('.animate-spin')
     expect(spinner).toBeInTheDocument()
   })
@@ -66,7 +82,13 @@ describe('loading state', () => {
 
 describe('empty state', () => {
   it('should show empty message when no logs', () => {
-    render(<AttendanceHistoryPanel logs={[]} isLoading={false} />)
+    render(
+      <AttendanceHistoryPanel
+        logs={[]}
+        isLoading={false}
+        {...mockProps}
+      />
+    )
     expect(screen.getByText('No attendance logs found.')).toBeInTheDocument()
   })
 })
@@ -77,6 +99,7 @@ describe('log display', () => {
       <AttendanceHistoryPanel
         logs={makeLogs([{ note: 'Remote work' }])}
         isLoading={false}
+        {...mockProps}
       />
     )
     expect(screen.getByText('Remote work')).toBeInTheDocument()
@@ -87,6 +110,7 @@ describe('log display', () => {
       <AttendanceHistoryPanel
         logs={makeLogs([{ note: undefined }])}
         isLoading={false}
+        {...mockProps}
       />
     )
     expect(screen.getByText('-')).toBeInTheDocument()
@@ -100,9 +124,10 @@ describe('log display', () => {
           { eventType: 'clock_out' }
         ])}
         isLoading={false}
+        {...mockProps}
       />
     )
-    expect(screen.getByText('打刻')).toBeInTheDocument()
-    expect(screen.getByText('退勤')).toBeInTheDocument()
+    expect(screen.getAllByText('Clock In').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Clock Out')).toBeInTheDocument()
   })
 })

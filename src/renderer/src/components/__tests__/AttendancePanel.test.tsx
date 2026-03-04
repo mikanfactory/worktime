@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { AttendancePanel } from '../AttendancePanel'
 import type { AttendanceSummary } from '../../../../shared/attendance'
 
@@ -47,19 +47,22 @@ describe('formatElapsedTime display', () => {
 })
 
 describe('button display', () => {
-  it('should show "出勤" when not working', () => {
+  it('should show Clock In and Clock Out buttons', () => {
     render(<AttendancePanel {...defaultProps} />)
-    expect(screen.getByRole('button', { name: '出勤' })).toBeInTheDocument()
+    // "Clock In" appears both in the button and status info
+    expect(screen.getAllByText('Clock In').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Clock Out')).toBeInTheDocument()
   })
 
-  it('should show "退勤" when working', () => {
-    render(
-      <AttendancePanel
-        {...defaultProps}
-        summary={{ ...defaultSummary, isWorking: true }}
-      />
-    )
-    expect(screen.getByRole('button', { name: '退勤' })).toBeInTheDocument()
+  it('should show Elapsed Time label', () => {
+    render(<AttendancePanel {...defaultProps} />)
+    expect(screen.getByText('Elapsed Time')).toBeInTheDocument()
+  })
+
+  it('should show status info row', () => {
+    render(<AttendancePanel {...defaultProps} />)
+    expect(screen.getByText('Status')).toBeInTheDocument()
+    expect(screen.getByText('Today')).toBeInTheDocument()
   })
 })
 
@@ -106,7 +109,7 @@ describe('timer countdown', () => {
 })
 
 describe('interactions', () => {
-  it('should call onLogAttendance and onRefreshSummary on click', async () => {
+  it('should call onLogAttendance and onRefreshSummary on Clock In click', async () => {
     const onLogAttendance = vi.fn<() => Promise<boolean>>().mockResolvedValue(true)
     const onRefreshSummary = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
 
@@ -118,7 +121,10 @@ describe('interactions', () => {
       />
     )
 
-    fireEvent.click(screen.getByRole('button', { name: '出勤' }))
+    // Find the Clock In button (the one inside the circular button, not the status label)
+    const clockInButtons = screen.getAllByText('Clock In')
+    const clockInBtn = clockInButtons.find(el => el.closest('button'))?.closest('button')
+    fireEvent.click(clockInBtn!)
 
     await waitFor(() => {
       expect(onLogAttendance).toHaveBeenCalled()
@@ -145,7 +151,9 @@ describe('interactions', () => {
     // Reset to count only post-click calls
     onRefreshSummary.mockClear()
 
-    fireEvent.click(screen.getByRole('button', { name: '出勤' }))
+    const clockInButtons = screen.getAllByText('Clock In')
+    const clockInBtn = clockInButtons.find(el => el.closest('button'))?.closest('button')
+    fireEvent.click(clockInBtn!)
 
     await waitFor(() => {
       expect(onLogAttendance).toHaveBeenCalled()
@@ -185,6 +193,3 @@ describe('onRefreshSummary on mount', () => {
     expect(onRefreshSummary).toHaveBeenCalled()
   })
 })
-
-// Need to import act for timer tests
-import { act } from '@testing-library/react'

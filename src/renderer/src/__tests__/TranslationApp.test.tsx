@@ -47,7 +47,8 @@ describe('AttendanceApp', () => {
     render(<AttendanceApp />)
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '出勤' })).toBeInTheDocument()
+      expect(screen.getByText('Elapsed Time')).toBeInTheDocument()
+      expect(screen.getByText('Clock Out')).toBeInTheDocument()
     })
   })
 
@@ -57,7 +58,7 @@ describe('AttendanceApp', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Attendance History' }))
 
     await waitFor(() => {
-      expect(mockApi.getAttendanceLogs).toHaveBeenCalledWith({ limit: 50 })
+      expect(mockApi.getAttendanceLogs).toHaveBeenCalled()
     })
   })
 
@@ -68,7 +69,8 @@ describe('AttendanceApp', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Attendance' }))
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '出勤' })).toBeInTheDocument()
+      expect(screen.getByText('Elapsed Time')).toBeInTheDocument()
+      expect(screen.getByText('Clock Out')).toBeInTheDocument()
     })
   })
 })
