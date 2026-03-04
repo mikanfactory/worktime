@@ -11,6 +11,8 @@ describe('DailySummaryPanel', () => {
 
   const mockCreateWorkSession = vi.fn().mockResolvedValue(true)
 
+  const mockDeleteWorkSession = vi.fn().mockResolvedValue(true)
+
   const sampleSummaries: DailySummary[] = [
     {
       date: '2026-03-01',
@@ -289,6 +291,94 @@ describe('DailySummaryPanel', () => {
       const addButtons = screen.getAllByRole('button', { name: /add session/i })
       await user.click(addButtons[0])
       expect(screen.getByText('勤務記録を追加')).toBeInTheDocument()
+    })
+  })
+
+  describe('delete session button', () => {
+    it('renders delete buttons on rows with session data', () => {
+      render(
+        <DailySummaryPanel
+          dailySummaries={sampleSummaries}
+          isLoading={false}
+          onLoadSummaries={mockLoadSummaries}
+          onDeleteWorkSession={mockDeleteWorkSession}
+        />
+      )
+      const deleteButtons = screen.getAllByRole('button', { name: /delete session/i })
+      expect(deleteButtons.length).toBe(2) // 2 rows with data
+    })
+
+    it('does not render delete buttons on rows without session data', () => {
+      const noDataSummaries: DailySummary[] = [
+        {
+          date: '2026-03-01',
+          workedSeconds: 0,
+          breakSeconds: 0,
+          sessionCount: 0
+        }
+      ]
+      render(
+        <DailySummaryPanel
+          dailySummaries={noDataSummaries}
+          isLoading={false}
+          onLoadSummaries={mockLoadSummaries}
+          onDeleteWorkSession={mockDeleteWorkSession}
+        />
+      )
+      const deleteButtons = screen.queryAllByRole('button', { name: /delete session/i })
+      expect(deleteButtons.length).toBe(0)
+    })
+
+    it('does not render delete buttons when onDeleteWorkSession is not provided', () => {
+      render(
+        <DailySummaryPanel
+          dailySummaries={sampleSummaries}
+          isLoading={false}
+          onLoadSummaries={mockLoadSummaries}
+        />
+      )
+      const deleteButtons = screen.queryAllByRole('button', { name: /delete session/i })
+      expect(deleteButtons.length).toBe(0)
+    })
+
+    it('opens delete confirmation dialog when delete button is clicked', async () => {
+      const user = userEvent.setup()
+      render(
+        <DailySummaryPanel
+          dailySummaries={sampleSummaries}
+          isLoading={false}
+          onLoadSummaries={mockLoadSummaries}
+          onDeleteWorkSession={mockDeleteWorkSession}
+        />
+      )
+
+      const deleteButtons = screen.getAllByRole('button', { name: /delete session/i })
+      await user.click(deleteButtons[0])
+      expect(screen.getByText('出勤記録の削除')).toBeInTheDocument()
+      expect(
+        screen.getByText(/03\/01 \(Sun\) の出勤記録を削除しますか？/)
+      ).toBeInTheDocument()
+    })
+
+    it('calls onDeleteWorkSession and reloads when confirmed', async () => {
+      const user = userEvent.setup()
+      render(
+        <DailySummaryPanel
+          dailySummaries={sampleSummaries}
+          isLoading={false}
+          onLoadSummaries={mockLoadSummaries}
+          onDeleteWorkSession={mockDeleteWorkSession}
+        />
+      )
+
+      const deleteButtons = screen.getAllByRole('button', { name: /delete session/i })
+      await user.click(deleteButtons[0])
+
+      const confirmButton = screen.getByRole('button', { name: '削除' })
+      await user.click(confirmButton)
+
+      expect(mockDeleteWorkSession).toHaveBeenCalledWith(1) // firstSessionId of first row
+      expect(mockLoadSummaries).toHaveBeenCalled()
     })
   })
 })
