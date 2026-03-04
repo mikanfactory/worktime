@@ -1,29 +1,29 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
 import type {
-  AttendanceLog,
-  AttendanceLogRequest,
-  AttendanceLogsPage,
+  WorkSession,
+  BreakSession,
   AttendanceSummary,
   DailySummary,
-  DeleteAttendanceLogRequest,
-  GetAttendanceLogsRequest,
+  DeleteWorkSessionRequest,
   GetDailySummariesRequest,
   GetMonthlySummaryRequest,
   GetTodaySummaryRequest,
   MonthlySummary,
   Result,
-  UpdateAttendanceLogRequest
+  UpdateWorkSessionRequest
 } from '../shared/attendance'
 
 declare global {
   interface Window {
     electron: ElectronAPI
     api: {
-      logAttendance: (request: AttendanceLogRequest) => Promise<Result<{ id: number }>>
-      getAttendanceLogs: (request?: GetAttendanceLogsRequest) => Promise<Result<AttendanceLogsPage>>
+      clockIn: (note?: string) => Promise<Result<WorkSession>>
+      clockOut: () => Promise<Result<WorkSession>>
+      startBreak: (note?: string) => Promise<Result<BreakSession>>
+      endBreak: () => Promise<Result<BreakSession>>
       getTodaySummary: (request?: GetTodaySummaryRequest) => Promise<Result<AttendanceSummary>>
-      updateAttendanceLog: (request: UpdateAttendanceLogRequest) => Promise<Result<AttendanceLog>>
-      deleteAttendanceLog: (request: DeleteAttendanceLogRequest) => Promise<Result<void>>
+      updateWorkSession: (request: UpdateWorkSessionRequest) => Promise<Result<WorkSession>>
+      deleteWorkSession: (request: DeleteWorkSessionRequest) => Promise<Result<void>>
       getDailySummaries: (request: GetDailySummariesRequest) => Promise<Result<DailySummary[]>>
       getMonthlySummary: (request: GetMonthlySummaryRequest) => Promise<Result<MonthlySummary>>
     }

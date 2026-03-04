@@ -1,26 +1,26 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
-  AttendanceLogRequest,
-  DeleteAttendanceLogRequest,
-  GetAttendanceLogsRequest,
+  DeleteWorkSessionRequest,
   GetDailySummariesRequest,
   GetMonthlySummaryRequest,
   GetTodaySummaryRequest,
-  UpdateAttendanceLogRequest
+  UpdateWorkSessionRequest
 } from '../shared/attendance'
 
 // Custom APIs for renderer
 const api = {
-  logAttendance: (request: AttendanceLogRequest) => ipcRenderer.invoke('attendance:log', request),
-  getAttendanceLogs: (request?: GetAttendanceLogsRequest) =>
-    ipcRenderer.invoke('attendance:getLogs', request),
+  clockIn: (note?: string) => ipcRenderer.invoke('attendance:clockIn', note ? { note } : undefined),
+  clockOut: () => ipcRenderer.invoke('attendance:clockOut'),
+  startBreak: (note?: string) =>
+    ipcRenderer.invoke('attendance:startBreak', note ? { note } : undefined),
+  endBreak: () => ipcRenderer.invoke('attendance:endBreak'),
   getTodaySummary: (request?: GetTodaySummaryRequest) =>
     ipcRenderer.invoke('attendance:getTodaySummary', request),
-  updateAttendanceLog: (request: UpdateAttendanceLogRequest) =>
-    ipcRenderer.invoke('attendance:updateLog', request),
-  deleteAttendanceLog: (request: DeleteAttendanceLogRequest) =>
-    ipcRenderer.invoke('attendance:deleteLog', request),
+  updateWorkSession: (request: UpdateWorkSessionRequest) =>
+    ipcRenderer.invoke('attendance:updateWorkSession', request),
+  deleteWorkSession: (request: DeleteWorkSessionRequest) =>
+    ipcRenderer.invoke('attendance:deleteWorkSession', request),
   getDailySummaries: (request: GetDailySummariesRequest) =>
     ipcRenderer.invoke('attendance:getDailySummaries', request),
   getMonthlySummary: (request: GetMonthlySummaryRequest) =>
