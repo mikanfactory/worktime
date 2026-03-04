@@ -7,6 +7,8 @@ import type { DailySummary } from '../../../../shared/attendance'
 describe('DailySummaryPanel', () => {
   const mockLoadSummaries = vi.fn().mockResolvedValue(undefined)
 
+  const mockUpdateWorkSession = vi.fn().mockResolvedValue(true)
+
   const sampleSummaries: DailySummary[] = [
     {
       date: '2026-03-01',
@@ -14,7 +16,9 @@ describe('DailySummaryPanel', () => {
       breakSeconds: 3600,
       firstClockIn: '2026-03-01T09:00:00.000Z',
       lastClockOut: '2026-03-01T17:00:00.000Z',
-      sessionCount: 1
+      sessionCount: 1,
+      firstSessionId: 1,
+      lastSessionId: 1
     },
     {
       date: '2026-03-02',
@@ -22,7 +26,9 @@ describe('DailySummaryPanel', () => {
       breakSeconds: 0,
       firstClockIn: '2026-03-02T10:00:00.000Z',
       lastClockOut: '2026-03-02T15:00:00.000Z',
-      sessionCount: 1
+      sessionCount: 1,
+      firstSessionId: 2,
+      lastSessionId: 2
     }
   ]
 
@@ -109,6 +115,7 @@ describe('DailySummaryPanel', () => {
         isLoading={false}
         onLoadSummaries={mockLoadSummaries}
         onDateClick={onDateClick}
+        onUpdateWorkSession={mockUpdateWorkSession}
       />
     )
 
@@ -116,5 +123,68 @@ describe('DailySummaryPanel', () => {
     // First row is header, second is first data row
     await user.click(rows[1])
     expect(onDateClick).toHaveBeenCalledWith('2026-03-01')
+  })
+
+  it('renders pencil icons next to clock-in and clock-out times', () => {
+    render(
+      <DailySummaryPanel
+        dailySummaries={sampleSummaries}
+        isLoading={false}
+        onLoadSummaries={mockLoadSummaries}
+        onUpdateWorkSession={mockUpdateWorkSession}
+      />
+    )
+    // Each data row has 2 pencil icon buttons (clock in + clock out)
+    const editButtons = screen.getAllByRole('button', { name: /edit/i })
+    expect(editButtons.length).toBe(4) // 2 rows x 2 icons
+  })
+
+  it('does not render pencil icons when no clock-in/clock-out values', () => {
+    const noTimeSummaries: DailySummary[] = [
+      {
+        date: '2026-03-01',
+        workedSeconds: 0,
+        breakSeconds: 0,
+        sessionCount: 0
+      }
+    ]
+    render(
+      <DailySummaryPanel
+        dailySummaries={noTimeSummaries}
+        isLoading={false}
+        onLoadSummaries={mockLoadSummaries}
+        onUpdateWorkSession={mockUpdateWorkSession}
+      />
+    )
+    const editButtons = screen.queryAllByRole('button', { name: /edit/i })
+    expect(editButtons.length).toBe(0)
+  })
+
+  it('opens edit dialog when pencil icon is clicked', async () => {
+    const user = userEvent.setup()
+    render(
+      <DailySummaryPanel
+        dailySummaries={sampleSummaries}
+        isLoading={false}
+        onLoadSummaries={mockLoadSummaries}
+        onUpdateWorkSession={mockUpdateWorkSession}
+      />
+    )
+
+    const editButtons = screen.getAllByRole('button', { name: /edit/i })
+    await user.click(editButtons[0]) // Click first pencil icon (Clock In)
+    expect(screen.getByText('Clock Inを編集')).toBeInTheDocument()
+  })
+
+  it('does not render pencil icons when onUpdateWorkSession is not provided', () => {
+    render(
+      <DailySummaryPanel
+        dailySummaries={sampleSummaries}
+        isLoading={false}
+        onLoadSummaries={mockLoadSummaries}
+      />
+    )
+    const editButtons = screen.queryAllByRole('button', { name: /edit/i })
+    expect(editButtons.length).toBe(0)
   })
 })

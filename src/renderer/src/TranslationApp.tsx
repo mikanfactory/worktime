@@ -43,6 +43,7 @@ export default function AttendanceApp() {
               dailySummaries={attendance.dailySummaries}
               isLoading={attendance.isLoading}
               onLoadSummaries={attendance.loadDailySummaries}
+              onUpdateWorkSession={attendance.updateWorkSession}
             />
           ) : activeTab === 'monthly-summary' ? (
             <MonthlySummaryPanel

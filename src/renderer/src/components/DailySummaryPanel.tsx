@@ -1,14 +1,24 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
-import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
-import type { DailySummary } from '../../../shared/attendance'
+import { ChevronLeft, ChevronRight, Loader2, Pencil } from 'lucide-react'
+import { EditTimeDialog } from './EditTimeDialog'
+import type { DailySummary, UpdateWorkSessionRequest } from '../../../shared/attendance'
+
+interface EditTarget {
+  sessionId: number
+  fieldLabel: string
+  fieldName: 'clockInAt' | 'clockOutAt'
+  currentValue: string
+  date: string
+}
 
 interface DailySummaryPanelProps {
   dailySummaries: DailySummary[]
   isLoading: boolean
   onLoadSummaries: (yearMonth: string) => Promise<void>
   onDateClick?: (date: string) => void
+  onUpdateWorkSession?: (request: UpdateWorkSessionRequest) => Promise<boolean>
 }
 
 function getCurrentYearMonth(): string {
@@ -57,9 +67,32 @@ export function DailySummaryPanel({
   dailySummaries,
   isLoading,
   onLoadSummaries,
-  onDateClick
+  onDateClick,
+  onUpdateWorkSession
 }: DailySummaryPanelProps) {
   const [yearMonth, setYearMonth] = useState(getCurrentYearMonth)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [editTarget, setEditTarget] = useState<EditTarget | null>(null)
+
+  const handleEditSave = useCallback(
+    async (data: UpdateWorkSessionRequest) => {
+      if (!onUpdateWorkSession) return false
+      const success = await onUpdateWorkSession(data)
+      if (success) {
+        void onLoadSummaries(yearMonth)
+      }
+      return success
+    },
+    [onUpdateWorkSession, onLoadSummaries, yearMonth]
+  )
+
+  const openEditDialog = useCallback(
+    (target: EditTarget) => {
+      setEditTarget(target)
+      setEditDialogOpen(true)
+    },
+    []
+  )
 
   const handleMonthChange = useCallback(
     (delta: number) => {
@@ -160,14 +193,70 @@ export function DailySummaryPanel({
                             holiday && !hasWork ? 'text-[#A3A3A3]' : 'text-foreground'
                           }`}
                         >
-                          {day.firstClockIn ? formatTime(day.firstClockIn) : '-'}
+                          <div className="flex items-center gap-1.5">
+                            <span>{day.firstClockIn ? formatTime(day.firstClockIn) : '-'}</span>
+                            {onUpdateWorkSession &&
+                              day.firstClockIn &&
+                              day.firstSessionId != null && (
+                                <button
+                                  aria-label="edit clock in"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    openEditDialog({
+                                      sessionId: day.firstSessionId!,
+                                      fieldLabel: 'Clock In',
+                                      fieldName: 'clockInAt',
+                                      currentValue: day.firstClockIn!,
+                                      date: day.date
+                                    })
+                                  }}
+                                  className="p-0.5 rounded hover:bg-muted/60 transition-colors"
+                                >
+                                  <Pencil
+                                    className={`h-3.5 w-3.5 ${
+                                      holiday && !hasWork
+                                        ? 'text-[#A3A3A3]'
+                                        : 'text-muted-foreground'
+                                    }`}
+                                  />
+                                </button>
+                              )}
+                          </div>
                         </td>
                         <td
                           className={`text-sm px-4 h-11 ${
                             holiday && !hasWork ? 'text-[#A3A3A3]' : 'text-foreground'
                           }`}
                         >
-                          {day.lastClockOut ? formatTime(day.lastClockOut) : '-'}
+                          <div className="flex items-center gap-1.5">
+                            <span>{day.lastClockOut ? formatTime(day.lastClockOut) : '-'}</span>
+                            {onUpdateWorkSession &&
+                              day.lastClockOut &&
+                              day.lastSessionId != null && (
+                                <button
+                                  aria-label="edit clock out"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    openEditDialog({
+                                      sessionId: day.lastSessionId!,
+                                      fieldLabel: 'Clock Out',
+                                      fieldName: 'clockOutAt',
+                                      currentValue: day.lastClockOut!,
+                                      date: day.date
+                                    })
+                                  }}
+                                  className="p-0.5 rounded hover:bg-muted/60 transition-colors"
+                                >
+                                  <Pencil
+                                    className={`h-3.5 w-3.5 ${
+                                      holiday && !hasWork
+                                        ? 'text-[#A3A3A3]'
+                                        : 'text-muted-foreground'
+                                    }`}
+                                  />
+                                </button>
+                              )}
+                          </div>
                         </td>
                         <td
                           className={`text-sm px-4 h-11 ${
@@ -196,6 +285,19 @@ export function DailySummaryPanel({
           </ScrollArea>
         )}
       </div>
+
+      {editTarget && (
+        <EditTimeDialog
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          sessionId={editTarget.sessionId}
+          fieldLabel={editTarget.fieldLabel}
+          fieldName={editTarget.fieldName}
+          currentValue={editTarget.currentValue}
+          date={editTarget.date}
+          onSave={handleEditSave}
+        />
+      )}
     </div>
   )
 }
