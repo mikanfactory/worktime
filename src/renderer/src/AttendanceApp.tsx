@@ -36,6 +36,7 @@ export default function AttendanceApp() {
               onLoadSummaries={attendance.loadDailySummaries}
               onUpdateWorkSession={attendance.updateWorkSession}
               onCreateWorkSession={attendance.createManualWorkSession}
+              onDeleteWorkSession={attendance.deleteWorkSession}
             />
           ) : activeTab === 'monthly-summary' ? (
             <MonthlySummaryPanel
