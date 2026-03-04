@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import AttendanceApp from '../TranslationApp'
+import AttendanceApp from '../AttendanceApp'
 import type {
   WorkSession,
   BreakSession,
