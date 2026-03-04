@@ -1,15 +1,12 @@
 import { ipcMain } from 'electron'
 import { AttendanceService } from './AttendanceService'
-import {
-  ATTENDANCE_EVENT_TYPES,
-  type AttendanceLogRequest,
-  type DeleteAttendanceLogRequest,
-  type GetAttendanceLogsRequest,
-  type GetDailySummariesRequest,
-  type GetMonthlySummaryRequest,
-  type GetTodaySummaryRequest,
-  type Result,
-  type UpdateAttendanceLogRequest
+import type {
+  DeleteWorkSessionRequest,
+  GetDailySummariesRequest,
+  GetMonthlySummaryRequest,
+  GetTodaySummaryRequest,
+  Result,
+  UpdateWorkSessionRequest
 } from '../../shared/attendance'
 
 const YEAR_MONTH_PATTERN = /^\d{4}-\d{2}$/
@@ -18,16 +15,24 @@ export class IpcHandlerService {
   constructor(private attendanceService: AttendanceService) {}
 
   registerHandlers(): void {
-    ipcMain.handle('attendance:log', async (_, payload: unknown) => {
-      const validated = this.validateLogRequest(payload)
+    ipcMain.handle('attendance:clockIn', async (_, payload: unknown) => {
+      const validated = this.validateOptionalNoteRequest(payload, 'attendance:clockIn')
       if (!validated.ok) return validated
-      return await this.attendanceService.logAttendance(validated.data)
+      return await this.attendanceService.clockIn(validated.data.note)
     })
 
-    ipcMain.handle('attendance:getLogs', async (_, payload: unknown) => {
-      const validated = this.validateGetLogsRequest(payload)
+    ipcMain.handle('attendance:clockOut', async () => {
+      return await this.attendanceService.clockOut()
+    })
+
+    ipcMain.handle('attendance:startBreak', async (_, payload: unknown) => {
+      const validated = this.validateOptionalNoteRequest(payload, 'attendance:startBreak')
       if (!validated.ok) return validated
-      return await this.attendanceService.getLogs(validated.data)
+      return await this.attendanceService.startBreak(validated.data.note)
+    })
+
+    ipcMain.handle('attendance:endBreak', async () => {
+      return await this.attendanceService.endBreak()
     })
 
     ipcMain.handle('attendance:getTodaySummary', async (_, payload: unknown) => {
@@ -36,16 +41,16 @@ export class IpcHandlerService {
       return await this.attendanceService.getTodaySummary(validated.data)
     })
 
-    ipcMain.handle('attendance:updateLog', async (_, payload: unknown) => {
-      const validated = this.validateUpdateLogRequest(payload)
+    ipcMain.handle('attendance:updateWorkSession', async (_, payload: unknown) => {
+      const validated = this.validateUpdateWorkSessionRequest(payload)
       if (!validated.ok) return validated
-      return await this.attendanceService.updateLog(validated.data)
+      return await this.attendanceService.updateWorkSession(validated.data)
     })
 
-    ipcMain.handle('attendance:deleteLog', async (_, payload: unknown) => {
-      const validated = this.validateDeleteLogRequest(payload)
+    ipcMain.handle('attendance:deleteWorkSession', async (_, payload: unknown) => {
+      const validated = this.validateDeleteWorkSessionRequest(payload)
       if (!validated.ok) return validated
-      return await this.attendanceService.deleteLog(validated.data)
+      return await this.attendanceService.deleteWorkSession(validated.data)
     })
 
     ipcMain.handle('attendance:getDailySummaries', async (_, payload: unknown) => {
@@ -61,75 +66,28 @@ export class IpcHandlerService {
     })
   }
 
-  private validateLogRequest(payload: unknown): Result<AttendanceLogRequest> {
-    if (!this.isRecord(payload)) {
-      return this.validationError('attendance:log payload must be an object')
+  private validateOptionalNoteRequest(
+    payload: unknown,
+    channel: string
+  ): Result<{ note?: string }> {
+    if (payload === undefined || payload === null) {
+      return { ok: true, data: {} }
     }
 
-    const { eventType, note, occurredAt } = payload
-    if (
-      typeof eventType !== 'string' ||
-      !ATTENDANCE_EVENT_TYPES.includes(eventType as AttendanceLogRequest['eventType'])
-    ) {
-      return this.validationError(`eventType must be one of: ${ATTENDANCE_EVENT_TYPES.join(', ')}`)
+    if (!this.isRecord(payload)) {
+      return this.validationError(`${channel} payload must be an object`)
     }
+
+    const { note } = payload
 
     if (note !== undefined && (typeof note !== 'string' || note.length > 1000)) {
       return this.validationError('note must be a string with max length 1000')
     }
 
-    if (occurredAt !== undefined && !this.isIsoDateString(occurredAt)) {
-      return this.validationError('occurredAt must be a valid ISO8601 string')
-    }
-
     return {
       ok: true,
       data: {
-        eventType: eventType as AttendanceLogRequest['eventType'],
-        note: note as string | undefined,
-        occurredAt: occurredAt as string | undefined
-      }
-    }
-  }
-
-  private validateGetLogsRequest(payload: unknown): Result<GetAttendanceLogsRequest> {
-    if (payload === undefined || payload === null) {
-      return { ok: true, data: { limit: 50 } }
-    }
-
-    if (!this.isRecord(payload)) {
-      return this.validationError('attendance:getLogs payload must be an object')
-    }
-
-    const { from, to, limit, cursor } = payload
-
-    if (from !== undefined && !this.isIsoDateString(from)) {
-      return this.validationError('from must be a valid ISO8601 string')
-    }
-
-    if (to !== undefined && !this.isIsoDateString(to)) {
-      return this.validationError('to must be a valid ISO8601 string')
-    }
-
-    if (cursor !== undefined && typeof cursor !== 'string') {
-      return this.validationError('cursor must be a string')
-    }
-
-    if (limit !== undefined && limit !== null && typeof limit !== 'number') {
-      return this.validationError('limit must be a number')
-    }
-
-    if (typeof limit === 'number' && (!Number.isInteger(limit) || limit < 1 || limit > 200)) {
-      return this.validationError('limit must be an integer between 1 and 200')
-    }
-
-    return {
-      ok: true,
-      data: {
-        from,
-        to,
-        cursor: cursor as string | undefined,
-        limit: typeof limit === 'number' ? limit : 50
+        note: typeof note === 'string' ? note.trim() || undefined : undefined
       }
     }
   }
@@ -151,27 +109,23 @@ export class IpcHandlerService {
     return { ok: true, data: { date: date as string | undefined } }
   }
 
-  private validateUpdateLogRequest(payload: unknown): Result<UpdateAttendanceLogRequest> {
+  private validateUpdateWorkSessionRequest(payload: unknown): Result<UpdateWorkSessionRequest> {
     if (!this.isRecord(payload)) {
-      return this.validationError('attendance:updateLog payload must be an object')
+      return this.validationError('attendance:updateWorkSession payload must be an object')
     }
 
-    const { id, eventType, timestamp, note } = payload
+    const { id, clockInAt, clockOutAt, note } = payload
 
     if (typeof id !== 'number' || !Number.isInteger(id) || id < 1) {
       return this.validationError('id must be a positive integer')
     }
 
-    if (
-      eventType !== undefined &&
-      (typeof eventType !== 'string' ||
-        !ATTENDANCE_EVENT_TYPES.includes(eventType as AttendanceLogRequest['eventType']))
-    ) {
-      return this.validationError(`eventType must be one of: ${ATTENDANCE_EVENT_TYPES.join(', ')}`)
+    if (clockInAt !== undefined && !this.isIsoDateString(clockInAt)) {
+      return this.validationError('clockInAt must be a valid ISO8601 string')
     }
 
-    if (timestamp !== undefined && !this.isIsoDateString(timestamp)) {
-      return this.validationError('timestamp must be a valid ISO8601 string')
+    if (clockOutAt !== undefined && !this.isIsoDateString(clockOutAt)) {
+      return this.validationError('clockOutAt must be a valid ISO8601 string')
     }
 
     if (note !== undefined && (typeof note !== 'string' || note.length > 1000)) {
@@ -182,16 +136,16 @@ export class IpcHandlerService {
       ok: true,
       data: {
         id: id as number,
-        eventType: eventType as UpdateAttendanceLogRequest['eventType'],
-        timestamp: timestamp as string | undefined,
+        clockInAt: clockInAt as string | undefined,
+        clockOutAt: clockOutAt as string | undefined,
         note: note as string | undefined
       }
     }
   }
 
-  private validateDeleteLogRequest(payload: unknown): Result<DeleteAttendanceLogRequest> {
+  private validateDeleteWorkSessionRequest(payload: unknown): Result<DeleteWorkSessionRequest> {
     if (!this.isRecord(payload)) {
-      return this.validationError('attendance:deleteLog payload must be an object')
+      return this.validationError('attendance:deleteWorkSession payload must be an object')
     }
 
     const { id } = payload

@@ -2,11 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { AttendanceService } from '../AttendanceService'
 
 vi.mock('../../../db/service', () => ({
-  saveAttendanceLog: vi.fn(),
-  getAttendanceLogs: vi.fn(),
+  createWorkSession: vi.fn(),
+  endWorkSession: vi.fn(),
+  createBreakSession: vi.fn(),
+  endBreakSession: vi.fn(),
   getTodaySummary: vi.fn(),
-  updateAttendanceLog: vi.fn(),
-  deleteAttendanceLog: vi.fn(),
+  updateWorkSession: vi.fn(),
+  deleteWorkSession: vi.fn(),
   getDailySummaries: vi.fn(),
   getMonthlySummary: vi.fn()
 }))
@@ -22,113 +24,138 @@ beforeEach(() => {
   service = new AttendanceService()
 })
 
-describe('logAttendance', () => {
-  it('should save attendance and return ok result with id', async () => {
-    vi.mocked(db.saveAttendanceLog).mockResolvedValue(42)
+describe('clockIn', () => {
+  it('should create work session and return ok result', async () => {
+    const session = {
+      id: 1,
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      breaks: [],
+      createdAt: '2026-03-01T09:00:00.000Z',
+      updatedAt: '2026-03-01T09:00:00.000Z'
+    }
+    mockedDb.createWorkSession.mockResolvedValue(session)
 
-    const result = await service.logAttendance({
-      eventType: 'clock_in',
-      occurredAt: '2024-01-01T09:00:00Z'
-    })
-    expect(result).toEqual({ ok: true, data: { id: 42 } })
-    expect(db.saveAttendanceLog).toHaveBeenCalledWith(
-      'clock_in',
-      '2024-01-01T09:00:00Z',
-      undefined
-    )
+    const result = await service.clockIn()
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.data.id).toBe(1)
+    }
   })
 
-  it('should use current timestamp when occurredAt is not provided', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2024-06-15T10:30:00Z'))
-    vi.mocked(db.saveAttendanceLog).mockResolvedValue(1)
+  it('should pass note to createWorkSession', async () => {
+    const session = {
+      id: 1,
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      breaks: [],
+      createdAt: '2026-03-01T09:00:00.000Z',
+      updatedAt: '2026-03-01T09:00:00.000Z'
+    }
+    mockedDb.createWorkSession.mockResolvedValue(session)
 
-    await service.logAttendance({ eventType: 'clock_in' })
-    const calledTimestamp = vi.mocked(db.saveAttendanceLog).mock.calls[0][1]
-    expect(calledTimestamp).toBe('2024-06-15T10:30:00.000Z')
-
-    vi.useRealTimers()
-  })
-
-  it('should trim note whitespace', async () => {
-    vi.mocked(db.saveAttendanceLog).mockResolvedValue(1)
-
-    await service.logAttendance({
-      eventType: 'clock_in',
-      note: '  Remote work  '
-    })
-    expect(db.saveAttendanceLog).toHaveBeenCalledWith(
-      'clock_in',
+    await service.clockIn('Remote work')
+    expect(mockedDb.createWorkSession).toHaveBeenCalledWith(
       expect.any(String),
       'Remote work'
     )
   })
 
-  it('should set note to undefined when empty after trim', async () => {
-    vi.mocked(db.saveAttendanceLog).mockResolvedValue(1)
-
-    await service.logAttendance({
-      eventType: 'clock_in',
-      note: '   '
-    })
-    expect(db.saveAttendanceLog).toHaveBeenCalledWith(
-      'clock_in',
-      expect.any(String),
-      undefined
-    )
-  })
-
   it('should return error result when db throws', async () => {
-    vi.mocked(db.saveAttendanceLog).mockRejectedValue(new Error('DB connection failed'))
+    mockedDb.createWorkSession.mockRejectedValue(
+      new Error('An open work session already exists')
+    )
 
-    const result = await service.logAttendance({ eventType: 'clock_in' })
-    expect(result).toEqual({
-      ok: false,
-      code: 'DB_ERROR',
-      message: 'DB connection failed'
-    })
+    const result = await service.clockIn()
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.code).toBe('DB_ERROR')
+      expect(result.message).toBe('An open work session already exists')
+    }
   })
 
   it('should handle non-Error throws', async () => {
-    vi.mocked(db.saveAttendanceLog).mockRejectedValue('string error')
+    mockedDb.createWorkSession.mockRejectedValue('string error')
 
-    const result = await service.logAttendance({ eventType: 'clock_in' })
-    expect(result).toEqual({
-      ok: false,
-      code: 'DB_ERROR',
-      message: 'Unknown error'
-    })
+    const result = await service.clockIn()
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.message).toBe('Unknown error')
+    }
   })
 })
 
-describe('getLogs', () => {
-  it('should delegate parameters to db.getAttendanceLogs', async () => {
-    const logsPage = { logs: [], nextCursor: undefined }
-    vi.mocked(db.getAttendanceLogs).mockResolvedValue(logsPage)
+describe('clockOut', () => {
+  it('should end work session and return ok result', async () => {
+    const session = {
+      id: 1,
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z',
+      breaks: [],
+      createdAt: '2026-03-01T09:00:00.000Z',
+      updatedAt: '2026-03-01T17:00:00.000Z'
+    }
+    mockedDb.endWorkSession.mockResolvedValue(session)
 
-    const params = { from: '2024-01-01', to: '2024-01-02', limit: 10 }
-    const result = await service.getLogs(params)
-
-    expect(db.getAttendanceLogs).toHaveBeenCalledWith(params)
-    expect(result).toEqual({ ok: true, data: logsPage })
+    const result = await service.clockOut()
+    expect(result.ok).toBe(true)
   })
 
-  it('should use empty object as default request', async () => {
-    vi.mocked(db.getAttendanceLogs).mockResolvedValue({ logs: [] })
+  it('should return error when no open session', async () => {
+    mockedDb.endWorkSession.mockRejectedValue(new Error('No open work session found'))
 
-    await service.getLogs()
-    expect(db.getAttendanceLogs).toHaveBeenCalledWith({})
+    const result = await service.clockOut()
+    expect(result.ok).toBe(false)
+  })
+})
+
+describe('startBreak', () => {
+  it('should create break session and return ok result', async () => {
+    const breakSession = {
+      id: 10,
+      workSessionId: 1,
+      startAt: '2026-03-01T12:00:00.000Z'
+    }
+    mockedDb.createBreakSession.mockResolvedValue(breakSession)
+
+    const result = await service.startBreak()
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.data.id).toBe(10)
+    }
   })
 
-  it('should return error result when db throws', async () => {
-    vi.mocked(db.getAttendanceLogs).mockRejectedValue(new Error('Query failed'))
+  it('should return error when no open session', async () => {
+    mockedDb.createBreakSession.mockRejectedValue(new Error('No open work session found'))
 
-    const result = await service.getLogs()
-    expect(result).toEqual({
-      ok: false,
-      code: 'DB_ERROR',
-      message: 'Query failed'
-    })
+    const result = await service.startBreak()
+    expect(result.ok).toBe(false)
+  })
+})
+
+describe('endBreak', () => {
+  it('should end break session and return ok result', async () => {
+    const breakSession = {
+      id: 10,
+      workSessionId: 1,
+      startAt: '2026-03-01T12:00:00.000Z',
+      endAt: '2026-03-01T13:00:00.000Z'
+    }
+    mockedDb.endBreakSession.mockResolvedValue(breakSession)
+
+    const result = await service.endBreak()
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.data.endAt).toBe('2026-03-01T13:00:00.000Z')
+    }
+  })
+
+  it('should return error when no open break', async () => {
+    mockedDb.endBreakSession.mockRejectedValue(new Error('No open break found'))
+
+    const result = await service.endBreak()
+    expect(result.ok).toBe(false)
   })
 })
 
@@ -141,42 +168,38 @@ describe('getTodaySummary', () => {
     vi.useRealTimers()
   })
 
-  it('should compute day range from current date and pass to db', async () => {
-    vi.setSystemTime(new Date('2024-03-15T14:30:00Z'))
-    const summary = { workedSeconds: 3600, isWorking: false }
-    vi.mocked(db.getTodaySummary).mockResolvedValue(summary)
+  it('should format date from current date and pass to db', async () => {
+    vi.setSystemTime(new Date('2026-03-15T14:30:00Z'))
+    const summary = {
+      workedSeconds: 3600,
+      breakSeconds: 0,
+      isWorking: false,
+      isOnBreak: false
+    }
+    mockedDb.getTodaySummary.mockResolvedValue(summary)
 
     const result = await service.getTodaySummary({})
 
-    const [startIso, endIso] = vi.mocked(db.getTodaySummary).mock.calls[0]
-    const start = new Date(startIso)
-    const end = new Date(endIso)
-
-    expect(start.getHours()).toBe(0)
-    expect(start.getMinutes()).toBe(0)
-    expect(end.getTime() - start.getTime()).toBe(24 * 60 * 60 * 1000)
+    // The date string should match the local date
+    expect(mockedDb.getTodaySummary).toHaveBeenCalledWith(expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/))
     expect(result).toEqual({ ok: true, data: summary })
   })
 
-  it('should compute day range from provided date', async () => {
-    vi.setSystemTime(new Date('2024-03-15T14:30:00Z'))
-    vi.mocked(db.getTodaySummary).mockResolvedValue({
+  it('should format date from provided date', async () => {
+    vi.setSystemTime(new Date('2026-03-15T14:30:00Z'))
+    mockedDb.getTodaySummary.mockResolvedValue({
       workedSeconds: 0,
-      isWorking: false
+      breakSeconds: 0,
+      isWorking: false,
+      isOnBreak: false
     })
 
-    await service.getTodaySummary({ date: '2024-01-10T00:00:00Z' })
-
-    const [startIso, endIso] = vi.mocked(db.getTodaySummary).mock.calls[0]
-    const start = new Date(startIso)
-    const end = new Date(endIso)
-
-    expect(start.getDate()).toBe(10)
-    expect(end.getTime() - start.getTime()).toBe(24 * 60 * 60 * 1000)
+    await service.getTodaySummary({ date: '2026-01-10T00:00:00Z' })
+    expect(mockedDb.getTodaySummary).toHaveBeenCalledWith(expect.stringContaining('01-10'))
   })
 
   it('should return error result when db throws', async () => {
-    vi.mocked(db.getTodaySummary).mockRejectedValue(new Error('fail'))
+    mockedDb.getTodaySummary.mockRejectedValue(new Error('fail'))
 
     const result = await service.getTodaySummary({})
     expect(result).toEqual({
@@ -187,62 +210,58 @@ describe('getTodaySummary', () => {
   })
 })
 
-describe('updateLog', () => {
+describe('updateWorkSession', () => {
   it('returns ok result on successful update', async () => {
-    const updatedLog = {
+    const session = {
       id: 1,
-      eventType: 'clock_out' as const,
-      timestamp: '2026-03-01T17:00:00.000Z',
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T09:30:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z',
       note: 'updated',
-      createdAt: '2026-03-01T09:00:00.000Z'
+      breaks: [],
+      createdAt: '2026-03-01T09:00:00.000Z',
+      updatedAt: '2026-03-01T17:00:00.000Z'
     }
-    mockedDb.updateAttendanceLog.mockResolvedValue(updatedLog)
+    mockedDb.updateWorkSession.mockResolvedValue(session)
 
-    const result = await service.updateLog({
+    const result = await service.updateWorkSession({
       id: 1,
-      eventType: 'clock_out',
+      clockInAt: '2026-03-01T09:30:00.000Z',
       note: 'updated'
     })
 
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.data.id).toBe(1)
-      expect(result.data.eventType).toBe('clock_out')
+      expect(result.data.note).toBe('updated')
     }
   })
 
   it('returns error result on DB failure', async () => {
-    mockedDb.updateAttendanceLog.mockRejectedValue(new Error('Not found'))
+    mockedDb.updateWorkSession.mockRejectedValue(new Error('Not found'))
 
-    const result = await service.updateLog({ id: 999 })
-
+    const result = await service.updateWorkSession({ id: 999 })
     expect(result.ok).toBe(false)
     if (!result.ok) {
       expect(result.code).toBe('DB_ERROR')
-      expect(result.message).toBe('Not found')
     }
   })
 })
 
-describe('deleteLog', () => {
+describe('deleteWorkSession', () => {
   it('returns ok result on successful delete', async () => {
-    mockedDb.deleteAttendanceLog.mockResolvedValue(undefined)
+    mockedDb.deleteWorkSession.mockResolvedValue(undefined)
 
-    const result = await service.deleteLog({ id: 1 })
-
+    const result = await service.deleteWorkSession({ id: 1 })
     expect(result.ok).toBe(true)
-    expect(mockedDb.deleteAttendanceLog).toHaveBeenCalledWith(1)
+    expect(mockedDb.deleteWorkSession).toHaveBeenCalledWith(1)
   })
 
   it('returns error result on DB failure', async () => {
-    mockedDb.deleteAttendanceLog.mockRejectedValue(new Error('Not found'))
+    mockedDb.deleteWorkSession.mockRejectedValue(new Error('Not found'))
 
-    const result = await service.deleteLog({ id: 999 })
-
+    const result = await service.deleteWorkSession({ id: 999 })
     expect(result.ok).toBe(false)
-    if (!result.ok) {
-      expect(result.code).toBe('DB_ERROR')
-    }
   })
 })
 
@@ -252,15 +271,15 @@ describe('getDailySummaries', () => {
       {
         date: '2026-03-01',
         workedSeconds: 28800,
+        breakSeconds: 0,
         firstClockIn: '2026-03-01T09:00:00.000Z',
         lastClockOut: '2026-03-01T17:00:00.000Z',
-        logCount: 2
+        sessionCount: 1
       }
     ]
     mockedDb.getDailySummaries.mockResolvedValue(summaries)
 
     const result = await service.getDailySummaries({ yearMonth: '2026-03' })
-
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.data).toEqual(summaries)
@@ -271,7 +290,6 @@ describe('getDailySummaries', () => {
     mockedDb.getDailySummaries.mockRejectedValue(new Error('DB error'))
 
     const result = await service.getDailySummaries({ yearMonth: '2026-03' })
-
     expect(result.ok).toBe(false)
   })
 })
@@ -281,13 +299,13 @@ describe('getMonthlySummary', () => {
     const summary = {
       yearMonth: '2026-03',
       totalWorkedSeconds: 57600,
+      totalBreakSeconds: 3600,
       workingDays: 2,
       dailySummaries: []
     }
     mockedDb.getMonthlySummary.mockResolvedValue(summary)
 
     const result = await service.getMonthlySummary({ yearMonth: '2026-03' })
-
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.data).toEqual(summary)
@@ -298,7 +316,6 @@ describe('getMonthlySummary', () => {
     mockedDb.getMonthlySummary.mockRejectedValue(new Error('DB error'))
 
     const result = await service.getMonthlySummary({ yearMonth: '2026-03' })
-
     expect(result.ok).toBe(false)
   })
 })

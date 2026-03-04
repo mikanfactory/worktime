@@ -1,29 +1,26 @@
 import * as db from '../../db/service'
-import {
-  type AttendanceLog,
-  type AttendanceLogRequest,
-  type AttendanceLogsPage,
-  type AttendanceSummary,
-  type DailySummary,
-  type DeleteAttendanceLogRequest,
-  type GetAttendanceLogsRequest,
-  type GetDailySummariesRequest,
-  type GetMonthlySummaryRequest,
-  type GetTodaySummaryRequest,
-  type MonthlySummary,
-  type Result,
-  type UpdateAttendanceLogRequest
+import type {
+  WorkSession,
+  BreakSession,
+  AttendanceSummary,
+  DailySummary,
+  GetDailySummariesRequest,
+  GetMonthlySummaryRequest,
+  GetTodaySummaryRequest,
+  MonthlySummary,
+  Result,
+  UpdateWorkSessionRequest,
+  DeleteWorkSessionRequest
 } from '../../shared/attendance'
 
 export class AttendanceService {
-  async logAttendance(request: AttendanceLogRequest): Promise<Result<{ id: number }>> {
+  async clockIn(note?: string): Promise<Result<WorkSession>> {
     try {
-      const timestamp = request.occurredAt ?? new Date().toISOString()
-      const normalizedNote = request.note?.trim() || undefined
-      const id = await db.saveAttendanceLog(request.eventType, timestamp, normalizedNote)
-      return { ok: true, data: { id } }
+      const clockInAt = new Date().toISOString()
+      const session = await db.createWorkSession(clockInAt, note)
+      return { ok: true, data: session }
     } catch (error) {
-      console.error('Error logging attendance:', error)
+      console.error('Error clocking in:', error)
       return {
         ok: false,
         code: 'DB_ERROR',
@@ -32,12 +29,43 @@ export class AttendanceService {
     }
   }
 
-  async getLogs(request: GetAttendanceLogsRequest = {}): Promise<Result<AttendanceLogsPage>> {
+  async clockOut(): Promise<Result<WorkSession>> {
     try {
-      const logsPage = await db.getAttendanceLogs(request)
-      return { ok: true, data: logsPage }
+      const clockOutAt = new Date().toISOString()
+      const session = await db.endWorkSession(clockOutAt)
+      return { ok: true, data: session }
     } catch (error) {
-      console.error('Error getting attendance logs:', error)
+      console.error('Error clocking out:', error)
+      return {
+        ok: false,
+        code: 'DB_ERROR',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  async startBreak(note?: string): Promise<Result<BreakSession>> {
+    try {
+      const startAt = new Date().toISOString()
+      const breakSession = await db.createBreakSession(startAt, note)
+      return { ok: true, data: breakSession }
+    } catch (error) {
+      console.error('Error starting break:', error)
+      return {
+        ok: false,
+        code: 'DB_ERROR',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  async endBreak(): Promise<Result<BreakSession>> {
+    try {
+      const endAt = new Date().toISOString()
+      const breakSession = await db.endBreakSession(endAt)
+      return { ok: true, data: breakSession }
+    } catch (error) {
+      console.error('Error ending break:', error)
       return {
         ok: false,
         code: 'DB_ERROR',
@@ -49,8 +77,8 @@ export class AttendanceService {
   async getTodaySummary(request: GetTodaySummaryRequest = {}): Promise<Result<AttendanceSummary>> {
     try {
       const baseDate = request.date ? new Date(request.date) : new Date()
-      const { startIso, endIso } = this.getDayRange(baseDate)
-      const summary = await db.getTodaySummary(startIso, endIso)
+      const dateStr = this.formatDate(baseDate)
+      const summary = await db.getTodaySummary(dateStr)
       return { ok: true, data: summary }
     } catch (error) {
       console.error("Error getting today's summary:", error)
@@ -62,16 +90,16 @@ export class AttendanceService {
     }
   }
 
-  async updateLog(request: UpdateAttendanceLogRequest): Promise<Result<AttendanceLog>> {
+  async updateWorkSession(request: UpdateWorkSessionRequest): Promise<Result<WorkSession>> {
     try {
-      const log = await db.updateAttendanceLog(request.id, {
-        eventType: request.eventType,
-        timestamp: request.timestamp,
+      const session = await db.updateWorkSession(request.id, {
+        clockInAt: request.clockInAt,
+        clockOutAt: request.clockOutAt,
         note: request.note
       })
-      return { ok: true, data: log }
+      return { ok: true, data: session }
     } catch (error) {
-      console.error('Error updating attendance log:', error)
+      console.error('Error updating work session:', error)
       return {
         ok: false,
         code: 'DB_ERROR',
@@ -80,12 +108,12 @@ export class AttendanceService {
     }
   }
 
-  async deleteLog(request: DeleteAttendanceLogRequest): Promise<Result<void>> {
+  async deleteWorkSession(request: DeleteWorkSessionRequest): Promise<Result<void>> {
     try {
-      await db.deleteAttendanceLog(request.id)
+      await db.deleteWorkSession(request.id)
       return { ok: true, data: undefined }
     } catch (error) {
-      console.error('Error deleting attendance log:', error)
+      console.error('Error deleting work session:', error)
       return {
         ok: false,
         code: 'DB_ERROR',
@@ -122,11 +150,10 @@ export class AttendanceService {
     }
   }
 
-  private getDayRange(baseDate: Date): { startIso: string; endIso: string } {
-    const start = new Date(baseDate)
-    start.setHours(0, 0, 0, 0)
-    const end = new Date(start)
-    end.setDate(end.getDate() + 1)
-    return { startIso: start.toISOString(), endIso: end.toISOString() }
+  private formatDate(date: Date): string {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
   }
 }
