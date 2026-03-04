@@ -19,7 +19,9 @@ describe('MonthlySummaryPanel', () => {
         breakSeconds: 3600,
         firstClockIn: '2026-03-01T09:00:00.000Z',
         lastClockOut: '2026-03-01T17:00:00.000Z',
-        sessionCount: 1
+        sessionCount: 1,
+        firstSessionId: 1,
+        lastSessionId: 1
       },
       {
         date: '2026-03-02',
@@ -27,7 +29,9 @@ describe('MonthlySummaryPanel', () => {
         breakSeconds: 0,
         firstClockIn: '2026-03-02T10:00:00.000Z',
         lastClockOut: '2026-03-02T15:00:00.000Z',
-        sessionCount: 1
+        sessionCount: 1,
+        firstSessionId: 2,
+        lastSessionId: 2
       }
     ]
   }
