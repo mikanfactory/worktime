@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Play, LogOut, Coffee, ArrowRight } from 'lucide-react'
+import { Play, LogOut, Coffee } from 'lucide-react'
 import type { AttendanceSummary } from '../../../shared/attendance'
 
 interface AttendancePanelProps {
@@ -87,45 +87,13 @@ export function AttendancePanel({
               width: 120,
               height: 120,
               backgroundColor: '#90C695',
-              opacity: summary.isWorking ? 0.5 : 1,
+              opacity: summary.isWorking ? 0.4 : 1,
               cursor: summary.isWorking ? 'default' : 'pointer'
             }}
           >
             <Play className="h-8 w-8 text-white" />
             <span className="text-sm font-semibold text-white">Clock In</span>
           </button>
-
-          {summary.isWorking && !summary.isOnBreak && (
-            <button
-              onClick={() => handleAction(onStartBreak)}
-              className="flex flex-col items-center justify-center gap-2 rounded-full transition-opacity"
-              style={{
-                width: 120,
-                height: 120,
-                backgroundColor: '#F5A623',
-                cursor: 'pointer'
-              }}
-            >
-              <Coffee className="h-8 w-8 text-white" />
-              <span className="text-sm font-semibold text-white">Break</span>
-            </button>
-          )}
-
-          {summary.isOnBreak && (
-            <button
-              onClick={() => handleAction(onEndBreak)}
-              className="flex flex-col items-center justify-center gap-2 rounded-full transition-opacity"
-              style={{
-                width: 120,
-                height: 120,
-                backgroundColor: '#4A90D9',
-                cursor: 'pointer'
-              }}
-            >
-              <ArrowRight className="h-8 w-8 text-white" />
-              <span className="text-sm font-semibold text-white">Resume</span>
-            </button>
-          )}
 
           <button
             onClick={summary.isWorking && !summary.isOnBreak ? () => handleAction(onClockOut) : undefined}
@@ -143,6 +111,40 @@ export function AttendancePanel({
           </button>
         </div>
 
+        {summary.isWorking && !summary.isOnBreak && (
+          <button
+            onClick={() => handleAction(onStartBreak)}
+            className="flex items-center justify-center gap-2 transition-opacity"
+            style={{
+              width: 160,
+              height: 44,
+              borderRadius: 22,
+              backgroundColor: '#F59E0B',
+              cursor: 'pointer'
+            }}
+          >
+            <Coffee className="text-white" style={{ width: 18, height: 18 }} />
+            <span className="text-sm font-semibold text-white">Break</span>
+          </button>
+        )}
+
+        {summary.isOnBreak && (
+          <button
+            onClick={() => handleAction(onEndBreak)}
+            className="flex items-center justify-center gap-2 transition-opacity"
+            style={{
+              width: 160,
+              height: 44,
+              borderRadius: 22,
+              backgroundColor: '#90C695',
+              cursor: 'pointer'
+            }}
+          >
+            <Play className="text-white" style={{ width: 18, height: 18 }} />
+            <span className="text-sm font-semibold text-white">Resume</span>
+          </button>
+        )}
+
         <div className="flex items-center gap-12 w-full justify-center">
           <div className="flex flex-col items-center gap-1">
             <span className="text-xs font-medium text-muted-foreground">Status</span>
@@ -150,7 +152,7 @@ export function AttendancePanel({
               className="text-base font-semibold"
               style={{
                 color: summary.isOnBreak
-                  ? '#F5A623'
+                  ? '#F59E0B'
                   : summary.isWorking
                     ? '#90C695'
                     : '#737373'

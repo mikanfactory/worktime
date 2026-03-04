@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
-import { ChevronLeft, ChevronRight, Loader2, Pencil, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { EditTimeDialog } from './EditTimeDialog'
 import { AddSessionDialog } from './AddSessionDialog'
+import { DeleteSessionDialog } from './DeleteSessionDialog'
 import type {
   CreateManualWorkSessionRequest,
   DailySummary,
@@ -18,6 +19,11 @@ interface EditTarget {
   date: string
 }
 
+interface DeleteTarget {
+  sessionId: number
+  date: string
+}
+
 interface DailySummaryPanelProps {
   dailySummaries: DailySummary[]
   isLoading: boolean
@@ -25,6 +31,7 @@ interface DailySummaryPanelProps {
   onDateClick?: (date: string) => void
   onUpdateWorkSession?: (request: UpdateWorkSessionRequest) => Promise<boolean>
   onCreateWorkSession?: (request: CreateManualWorkSessionRequest) => Promise<boolean>
+  onDeleteWorkSession?: (id: number) => Promise<boolean>
 }
 
 function getCurrentYearMonth(): string {
@@ -111,13 +118,16 @@ export function DailySummaryPanel({
   onLoadSummaries,
   onDateClick,
   onUpdateWorkSession,
-  onCreateWorkSession
+  onCreateWorkSession,
+  onDeleteWorkSession
 }: DailySummaryPanelProps) {
   const [yearMonth, setYearMonth] = useState(getCurrentYearMonth)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [addDialogDate, setAddDialogDate] = useState('')
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
 
   const allDays = useMemo(
     () => generateAllDays(yearMonth, dailySummaries),
@@ -158,6 +168,20 @@ export function DailySummaryPanel({
   const openAddDialog = useCallback((date: string) => {
     setAddDialogDate(date)
     setAddDialogOpen(true)
+  }, [])
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!onDeleteWorkSession || !deleteTarget) return false
+    const success = await onDeleteWorkSession(deleteTarget.sessionId)
+    if (success) {
+      void onLoadSummaries(yearMonth)
+    }
+    return success
+  }, [onDeleteWorkSession, deleteTarget, onLoadSummaries, yearMonth])
+
+  const openDeleteDialog = useCallback((target: DeleteTarget) => {
+    setDeleteTarget(target)
+    setDeleteDialogOpen(true)
   }, [])
 
   const handleMonthChange = useCallback(
@@ -226,6 +250,7 @@ export function DailySummaryPanel({
                   <th className="text-left text-sm font-semibold text-muted-foreground px-4 h-12">
                     Working Hours
                   </th>
+                  {onDeleteWorkSession && <th className="w-9 h-12" />}
                 </tr>
               </thead>
               <tbody>
@@ -356,6 +381,25 @@ export function DailySummaryPanel({
                             ? formatWorkedTime(day.workedSeconds)
                             : '-'}
                       </td>
+                      {onDeleteWorkSession && (
+                        <td className="w-9 h-11 text-center">
+                          {day.sessionCount > 0 && day.firstSessionId != null && (
+                            <button
+                              aria-label="delete session"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openDeleteDialog({
+                                  sessionId: day.firstSessionId!,
+                                  date: day.date
+                                })
+                              }}
+                              className="p-0.5 rounded hover:bg-muted/60 transition-colors"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   )
                 })}
@@ -384,6 +428,15 @@ export function DailySummaryPanel({
         date={addDialogDate}
         onSave={handleCreateSave}
       />
+
+      {deleteTarget && (
+        <DeleteSessionDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          date={deleteTarget.date}
+          onConfirm={handleDeleteConfirm}
+        />
+      )}
     </div>
   )
 }
