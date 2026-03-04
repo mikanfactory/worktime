@@ -1,198 +1,311 @@
 import { getPrismaClient } from "./client";
-import { Prisma } from "@prisma/client";
-import {
-  type AttendanceEventType,
-  type AttendanceLog,
-  type AttendanceLogsPage,
-  type AttendanceSummary,
-  type DailySummary,
-  type MonthlySummary,
+import type {
+  WorkSession,
+  BreakSession,
+  AttendanceSummary,
+  DailySummary,
+  MonthlySummary,
 } from "../shared/attendance";
 
-interface CursorPayload {
-  timestamp: string;
-  id: number;
+function toWorkSession(
+  row: {
+    id: number;
+    date: string;
+    clockInAt: string;
+    clockOutAt: string | null;
+    note: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    breaks?: {
+      id: number;
+      workSessionId: number;
+      startAt: string;
+      endAt: string | null;
+      note: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+    }[];
+  },
+): WorkSession {
+  return {
+    id: row.id,
+    date: row.date,
+    clockInAt: row.clockInAt,
+    clockOutAt: row.clockOutAt ?? undefined,
+    note: row.note ?? undefined,
+    breaks: (row.breaks ?? []).map(toBreakSession),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
 }
 
-export async function saveAttendanceLog(
-  eventType: AttendanceEventType,
-  timestamp: string,
+function toBreakSession(row: {
+  id: number;
+  workSessionId: number;
+  startAt: string;
+  endAt: string | null;
+  note: string | null;
+}): BreakSession {
+  return {
+    id: row.id,
+    workSessionId: row.workSessionId,
+    startAt: row.startAt,
+    endAt: row.endAt ?? undefined,
+    note: row.note ?? undefined,
+  };
+}
+
+function deriveDateFromIso(isoString: string): string {
+  const d = new Date(isoString);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export async function createWorkSession(
+  clockInAt: string,
   note?: string,
-): Promise<number> {
+): Promise<WorkSession> {
   const prisma = getPrismaClient();
 
-  const record = await prisma.attendanceLog.create({
+  const openSession = await prisma.workSession.findFirst({
+    where: { clockOutAt: null },
+  });
+  if (openSession) {
+    throw new Error("An open work session already exists. Clock out first.");
+  }
+
+  const date = deriveDateFromIso(clockInAt);
+
+  const row = await prisma.workSession.create({
     data: {
-      eventType,
-      timestamp,
+      date,
+      clockInAt,
+      note: note ?? null,
+    },
+    include: { breaks: true },
+  });
+
+  return toWorkSession(row);
+}
+
+export async function endWorkSession(
+  clockOutAt: string,
+): Promise<WorkSession> {
+  const prisma = getPrismaClient();
+
+  const openSession = await prisma.workSession.findFirst({
+    where: { clockOutAt: null },
+    include: { breaks: true },
+  });
+  if (!openSession) {
+    throw new Error("No open work session found.");
+  }
+
+  if (clockOutAt <= openSession.clockInAt) {
+    throw new Error("clockOutAt must be after clockInAt.");
+  }
+
+  // Auto-close any open break sessions
+  const openBreaks = openSession.breaks.filter((b) => b.endAt === null);
+  for (const brk of openBreaks) {
+    await prisma.breakSession.update({
+      where: { id: brk.id },
+      data: { endAt: clockOutAt },
+    });
+  }
+
+  const row = await prisma.workSession.update({
+    where: { id: openSession.id },
+    data: { clockOutAt },
+    include: { breaks: true },
+  });
+
+  return toWorkSession(row);
+}
+
+export async function createBreakSession(
+  startAt: string,
+  note?: string,
+): Promise<BreakSession> {
+  const prisma = getPrismaClient();
+
+  const openSession = await prisma.workSession.findFirst({
+    where: { clockOutAt: null },
+    include: { breaks: true },
+  });
+  if (!openSession) {
+    throw new Error("No open work session found. Clock in first.");
+  }
+
+  const openBreak = openSession.breaks.find((b) => b.endAt === null);
+  if (openBreak) {
+    throw new Error("An open break already exists. End the current break first.");
+  }
+
+  if (startAt < openSession.clockInAt) {
+    throw new Error("Break start must be after clock-in time.");
+  }
+
+  const row = await prisma.breakSession.create({
+    data: {
+      workSessionId: openSession.id,
+      startAt,
       note: note ?? null,
     },
   });
 
-  return record.id;
+  return toBreakSession(row);
 }
 
-export async function getAttendanceLogs({
-  from,
-  to,
-  limit = 50,
-  cursor,
-}: {
-  from?: string;
-  to?: string;
-  limit?: number;
-  cursor?: string;
-}): Promise<AttendanceLogsPage> {
+export async function endBreakSession(
+  endAt: string,
+): Promise<BreakSession> {
   const prisma = getPrismaClient();
-  const safeLimit = Math.max(1, Math.min(limit, 200));
 
-  const where: Prisma.AttendanceLogWhereInput[] = [];
-
-  if (from) {
-    where.push({ timestamp: { gte: from } });
+  const openSession = await prisma.workSession.findFirst({
+    where: { clockOutAt: null },
+    include: { breaks: true },
+  });
+  if (!openSession) {
+    throw new Error("No open work session found.");
   }
 
-  if (to) {
-    where.push({ timestamp: { lt: to } });
+  const openBreak = openSession.breaks.find((b) => b.endAt === null);
+  if (!openBreak) {
+    throw new Error("No open break found.");
   }
 
-  const decodedCursor = cursor ? decodeCursorValue(cursor) : null;
-  if (decodedCursor) {
-    where.push({
-      OR: [
-        { timestamp: { lt: decodedCursor.timestamp } },
-        {
-          AND: [
-            { timestamp: decodedCursor.timestamp },
-            { id: { lt: decodedCursor.id } },
-          ],
-        },
-      ],
-    });
+  if (endAt <= openBreak.startAt) {
+    throw new Error("Break end must be after break start.");
   }
 
-  const rows = await prisma.attendanceLog.findMany({
-    where: where.length > 0 ? { AND: where } : undefined,
-    orderBy: [{ timestamp: "desc" }, { id: "desc" }],
-    take: safeLimit,
+  const row = await prisma.breakSession.update({
+    where: { id: openBreak.id },
+    data: { endAt },
   });
 
-  const logs: AttendanceLog[] = rows.map((row) => ({
-    id: row.id,
-    eventType: row.eventType as AttendanceEventType,
-    timestamp: row.timestamp,
-    note: row.note ?? undefined,
-    createdAt: row.createdAt.toISOString(),
-  }));
-
-  const nextCursor =
-    logs.length === safeLimit
-      ? encodeCursor(logs[logs.length - 1].timestamp, logs[logs.length - 1].id)
-      : undefined;
-
-  return { logs, nextCursor };
+  return toBreakSession(row);
 }
 
 export function calculateWorkedSeconds(
-  events: { eventType: string; timestamp: string }[],
-  countCurrentSession: boolean,
-): { workedSeconds: number; isWorking: boolean } {
-  let workedSeconds = 0;
-  let currentClockInTime: number | null = null;
+  session: { clockInAt: string; clockOutAt?: string | null },
+  breaks: { startAt: string; endAt?: string | null }[],
+  now: number = Date.now(),
+): { workedSeconds: number; breakSeconds: number } {
+  const clockIn = new Date(session.clockInAt).getTime();
+  const clockOut = session.clockOutAt
+    ? new Date(session.clockOutAt).getTime()
+    : now;
 
-  for (const event of events) {
-    if (event.eventType === "clock_in" && currentClockInTime === null) {
-      currentClockInTime = new Date(event.timestamp).getTime();
-    } else if (event.eventType === "clock_out" && currentClockInTime !== null) {
-      workedSeconds += Math.floor(
-        (new Date(event.timestamp).getTime() - currentClockInTime) / 1000,
-      );
-      currentClockInTime = null;
-    }
+  const totalSeconds = Math.max(0, Math.floor((clockOut - clockIn) / 1000));
+
+  let breakSeconds = 0;
+  for (const brk of breaks) {
+    const bStart = new Date(brk.startAt).getTime();
+    const bEnd = brk.endAt ? new Date(brk.endAt).getTime() : now;
+    breakSeconds += Math.max(0, Math.floor((bEnd - bStart) / 1000));
   }
 
-  const isWorking = currentClockInTime !== null;
-  if (countCurrentSession && currentClockInTime !== null) {
-    workedSeconds += Math.floor((Date.now() - currentClockInTime) / 1000);
-  }
+  const workedSeconds = Math.max(0, totalSeconds - breakSeconds);
 
-  return { workedSeconds: Math.max(0, workedSeconds), isWorking };
+  return { workedSeconds, breakSeconds };
 }
 
 export async function getTodaySummary(
-  dayStartIso: string,
-  dayEndIso: string,
+  dateStr: string,
 ): Promise<AttendanceSummary> {
   const prisma = getPrismaClient();
 
-  const firstClockInRow = await prisma.attendanceLog.findFirst({
-    where: {
-      timestamp: { gte: dayStartIso, lt: dayEndIso },
-      eventType: "clock_in",
-    },
-    orderBy: { timestamp: "asc" },
-    select: { timestamp: true },
+  const sessions = await prisma.workSession.findMany({
+    where: { date: dateStr },
+    include: { breaks: true },
+    orderBy: { clockInAt: "asc" },
   });
 
-  const latestEventRow = await prisma.attendanceLog.findFirst({
-    where: {
-      timestamp: { gte: dayStartIso, lt: dayEndIso },
-    },
-    orderBy: { timestamp: "desc" },
-    select: { timestamp: true },
-  });
+  if (sessions.length === 0) {
+    return {
+      workedSeconds: 0,
+      breakSeconds: 0,
+      isWorking: false,
+      isOnBreak: false,
+    };
+  }
 
-  const events = await prisma.attendanceLog.findMany({
-    where: {
-      timestamp: { gte: dayStartIso, lt: dayEndIso },
-      eventType: { in: ["clock_in", "clock_out"] },
-    },
-    orderBy: [{ timestamp: "asc" }, { id: "asc" }],
-    select: { eventType: true, timestamp: true },
-  });
+  const now = Date.now();
+  let totalWorked = 0;
+  let totalBreak = 0;
 
-  const { workedSeconds, isWorking } = calculateWorkedSeconds(events, true);
+  for (const session of sessions) {
+    const { workedSeconds, breakSeconds } = calculateWorkedSeconds(
+      session,
+      session.breaks,
+      now,
+    );
+    totalWorked += workedSeconds;
+    totalBreak += breakSeconds;
+  }
+
+  const firstClockIn = sessions[0].clockInAt;
+
+  const lastSession = sessions[sessions.length - 1];
+  const isWorking = lastSession.clockOutAt === null;
+  const isOnBreak =
+    isWorking && lastSession.breaks.some((b) => b.endAt === null);
+
+  // Determine latest event timestamp
+  let latestEvent = lastSession.clockOutAt ?? lastSession.clockInAt;
+  for (const brk of lastSession.breaks) {
+    const bTime = brk.endAt ?? brk.startAt;
+    if (bTime > latestEvent) {
+      latestEvent = bTime;
+    }
+  }
+
+  const currentSession = isWorking ? toWorkSession(lastSession) : undefined;
 
   return {
-    firstClockIn: firstClockInRow?.timestamp || undefined,
-    latestEvent: latestEventRow?.timestamp || undefined,
-    workedSeconds,
+    firstClockIn,
+    latestEvent,
+    workedSeconds: totalWorked,
+    breakSeconds: totalBreak,
     isWorking,
+    isOnBreak,
+    currentSession,
   };
 }
 
-export async function updateAttendanceLog(
+export async function updateWorkSession(
   id: number,
   data: {
-    eventType?: AttendanceEventType;
-    timestamp?: string;
+    clockInAt?: string;
+    clockOutAt?: string;
     note?: string;
   },
-): Promise<AttendanceLog> {
+): Promise<WorkSession> {
   const prisma = getPrismaClient();
 
-  const updateData: Prisma.AttendanceLogUpdateInput = {};
-  if (data.eventType !== undefined) updateData.eventType = data.eventType;
-  if (data.timestamp !== undefined) updateData.timestamp = data.timestamp;
+  const updateData: Record<string, string> = {};
+  if (data.clockInAt !== undefined) {
+    updateData.clockInAt = data.clockInAt;
+    updateData.date = deriveDateFromIso(data.clockInAt);
+  }
+  if (data.clockOutAt !== undefined) updateData.clockOutAt = data.clockOutAt;
   if (data.note !== undefined) updateData.note = data.note;
 
-  const row = await prisma.attendanceLog.update({
+  const row = await prisma.workSession.update({
     where: { id },
     data: updateData,
+    include: { breaks: true },
   });
 
-  return {
-    id: row.id,
-    eventType: row.eventType as AttendanceEventType,
-    timestamp: row.timestamp,
-    note: row.note ?? undefined,
-    createdAt: row.createdAt.toISOString(),
-  };
+  return toWorkSession(row);
 }
 
-export async function deleteAttendanceLog(id: number): Promise<void> {
+export async function deleteWorkSession(id: number): Promise<void> {
   const prisma = getPrismaClient();
-  await prisma.attendanceLog.delete({ where: { id } });
+  await prisma.workSession.delete({ where: { id } });
 }
 
 export async function getDailySummaries(
@@ -200,52 +313,60 @@ export async function getDailySummaries(
 ): Promise<DailySummary[]> {
   const prisma = getPrismaClient();
 
-  const [year, month] = yearMonth.split("-").map(Number);
-  const startDate = new Date(year, month - 1, 1);
-  const endDate = new Date(year, month, 1);
-  const startIso = startDate.toISOString();
-  const endIso = endDate.toISOString();
-
-  const events = await prisma.attendanceLog.findMany({
+  const sessions = await prisma.workSession.findMany({
     where: {
-      timestamp: { gte: startIso, lt: endIso },
-      eventType: { in: ["clock_in", "clock_out"] },
+      date: { startsWith: yearMonth },
     },
-    orderBy: [{ timestamp: "asc" }, { id: "asc" }],
-    select: { eventType: true, timestamp: true },
+    include: { breaks: true },
+    orderBy: { clockInAt: "asc" },
   });
 
   const dayMap = new Map<
     string,
-    { eventType: string; timestamp: string }[]
+    typeof sessions
   >();
 
-  for (const event of events) {
-    const date = event.timestamp.substring(0, 10);
-    const existing = dayMap.get(date);
+  for (const session of sessions) {
+    const existing = dayMap.get(session.date);
     if (existing) {
-      existing.push(event);
+      existing.push(session);
     } else {
-      dayMap.set(date, [event]);
+      dayMap.set(session.date, [session]);
     }
   }
 
   const summaries: DailySummary[] = [];
-  for (const [date, dayEvents] of dayMap) {
-    const { workedSeconds } = calculateWorkedSeconds(dayEvents, false);
+  for (const [date, daySessions] of dayMap) {
+    let totalWorked = 0;
+    let totalBreak = 0;
 
-    const clockIns = dayEvents.filter((e) => e.eventType === "clock_in");
-    const clockOuts = dayEvents.filter((e) => e.eventType === "clock_out");
+    for (const session of daySessions) {
+      // For historical summaries, don't count current time
+      const now = session.clockOutAt
+        ? new Date(session.clockOutAt).getTime()
+        : Date.now();
+      const { workedSeconds, breakSeconds } = calculateWorkedSeconds(
+        session,
+        session.breaks,
+        now,
+      );
+      totalWorked += workedSeconds;
+      totalBreak += breakSeconds;
+    }
+
+    const clockIns = daySessions.map((s) => s.clockInAt);
+    const clockOuts = daySessions
+      .filter((s) => s.clockOutAt !== null)
+      .map((s) => s.clockOutAt!);
 
     summaries.push({
       date,
-      workedSeconds,
-      firstClockIn: clockIns.length > 0 ? clockIns[0].timestamp : undefined,
+      workedSeconds: totalWorked,
+      breakSeconds: totalBreak,
+      firstClockIn: clockIns.length > 0 ? clockIns[0] : undefined,
       lastClockOut:
-        clockOuts.length > 0
-          ? clockOuts[clockOuts.length - 1].timestamp
-          : undefined,
-      logCount: dayEvents.length,
+        clockOuts.length > 0 ? clockOuts[clockOuts.length - 1] : undefined,
+      sessionCount: daySessions.length,
     });
   }
 
@@ -262,6 +383,10 @@ export async function getMonthlySummary(
     (sum, d) => sum + d.workedSeconds,
     0,
   );
+  const totalBreakSeconds = dailySummaries.reduce(
+    (sum, d) => sum + d.breakSeconds,
+    0,
+  );
   const workingDays = dailySummaries.filter(
     (d) => d.workedSeconds > 0,
   ).length;
@@ -269,30 +394,8 @@ export async function getMonthlySummary(
   return {
     yearMonth,
     totalWorkedSeconds,
+    totalBreakSeconds,
     workingDays,
     dailySummaries,
   };
 }
-
-function encodeCursor(timestamp: string, id: number): string {
-  const payload: CursorPayload = { timestamp, id };
-  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
-}
-
-function decodeCursorValue(cursor: string): CursorPayload | null {
-  try {
-    const parsed = JSON.parse(Buffer.from(cursor, "base64").toString("utf8"));
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      typeof parsed.timestamp === "string" &&
-      Number.isInteger(parsed.id)
-    ) {
-      return { timestamp: parsed.timestamp, id: parsed.id };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
