@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DailySummaryPanel } from '../DailySummaryPanel'
@@ -8,6 +8,8 @@ describe('DailySummaryPanel', () => {
   const mockLoadSummaries = vi.fn().mockResolvedValue(undefined)
 
   const mockUpdateWorkSession = vi.fn().mockResolvedValue(true)
+
+  const mockCreateWorkSession = vi.fn().mockResolvedValue(true)
 
   const sampleSummaries: DailySummary[] = [
     {
@@ -190,5 +192,103 @@ describe('DailySummaryPanel', () => {
     )
     const editButtons = screen.queryAllByRole('button', { name: /edit/i })
     expect(editButtons.length).toBe(0)
+  })
+
+  describe('add session button for empty past dates', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date('2026-03-04T12:00:00Z'))
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('shows add button on empty past dates when onCreateWorkSession is provided', () => {
+      render(
+        <DailySummaryPanel
+          dailySummaries={[]}
+          isLoading={false}
+          onLoadSummaries={mockLoadSummaries}
+          onCreateWorkSession={mockCreateWorkSession}
+        />
+      )
+      // Past empty dates (03/01, 03/02, 03/03) should have add buttons
+      const addButtons = screen.getAllByRole('button', { name: /add session/i })
+      expect(addButtons.length).toBe(3) // March 1, 2, 3
+    })
+
+    it('does not show add button on today or future dates', () => {
+      render(
+        <DailySummaryPanel
+          dailySummaries={[]}
+          isLoading={false}
+          onLoadSummaries={mockLoadSummaries}
+          onCreateWorkSession={mockCreateWorkSession}
+        />
+      )
+      // We should only have 3 add buttons (Mar 1-3), not for Mar 4 (today) or later
+      const addButtons = screen.getAllByRole('button', { name: /add session/i })
+      expect(addButtons.length).toBe(3)
+    })
+
+    it('does not show add button on dates that already have sessions', () => {
+      const summariesWithData: DailySummary[] = [
+        {
+          date: '2026-03-01',
+          workedSeconds: 28800,
+          breakSeconds: 0,
+          firstClockIn: '2026-03-01T09:00:00.000Z',
+          lastClockOut: '2026-03-01T17:00:00.000Z',
+          sessionCount: 1,
+          firstSessionId: 1,
+          lastSessionId: 1
+        }
+      ]
+      render(
+        <DailySummaryPanel
+          dailySummaries={summariesWithData}
+          isLoading={false}
+          onLoadSummaries={mockLoadSummaries}
+          onCreateWorkSession={mockCreateWorkSession}
+        />
+      )
+      // 03/01 has data so no add button, 03/02 and 03/03 are empty past dates
+      const addButtons = screen.getAllByRole('button', { name: /add session/i })
+      expect(addButtons.length).toBe(2)
+    })
+
+    it('does not show add buttons when onCreateWorkSession is not provided', () => {
+      render(
+        <DailySummaryPanel
+          dailySummaries={[]}
+          isLoading={false}
+          onLoadSummaries={mockLoadSummaries}
+        />
+      )
+      const addButtons = screen.queryAllByRole('button', { name: /add session/i })
+      expect(addButtons.length).toBe(0)
+    })
+
+    it('opens add session dialog when add button is clicked', async () => {
+      vi.useRealTimers()
+      const user = userEvent.setup()
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date('2026-03-04T12:00:00Z'))
+
+      render(
+        <DailySummaryPanel
+          dailySummaries={[]}
+          isLoading={false}
+          onLoadSummaries={mockLoadSummaries}
+          onCreateWorkSession={mockCreateWorkSession}
+        />
+      )
+
+      vi.useRealTimers()
+      const addButtons = screen.getAllByRole('button', { name: /add session/i })
+      await user.click(addButtons[0])
+      expect(screen.getByText('勤務記録を追加')).toBeInTheDocument()
+    })
   })
 })

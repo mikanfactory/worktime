@@ -1,9 +1,14 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Button } from './ui/button'
 import { ScrollArea } from './ui/scroll-area'
-import { ChevronLeft, ChevronRight, Loader2, Pencil } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, Pencil, Plus } from 'lucide-react'
 import { EditTimeDialog } from './EditTimeDialog'
-import type { DailySummary, UpdateWorkSessionRequest } from '../../../shared/attendance'
+import { AddSessionDialog } from './AddSessionDialog'
+import type {
+  CreateManualWorkSessionRequest,
+  DailySummary,
+  UpdateWorkSessionRequest
+} from '../../../shared/attendance'
 
 interface EditTarget {
   sessionId: number
@@ -19,6 +24,7 @@ interface DailySummaryPanelProps {
   onLoadSummaries: (yearMonth: string) => Promise<void>
   onDateClick?: (date: string) => void
   onUpdateWorkSession?: (request: UpdateWorkSessionRequest) => Promise<boolean>
+  onCreateWorkSession?: (request: CreateManualWorkSessionRequest) => Promise<boolean>
 }
 
 function getCurrentYearMonth(): string {
@@ -104,11 +110,21 @@ export function DailySummaryPanel({
   isLoading,
   onLoadSummaries,
   onDateClick,
-  onUpdateWorkSession
+  onUpdateWorkSession,
+  onCreateWorkSession
 }: DailySummaryPanelProps) {
   const [yearMonth, setYearMonth] = useState(getCurrentYearMonth)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null)
+  const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [addDialogDate, setAddDialogDate] = useState('')
+
+  const allDays = useMemo(
+    () => generateAllDays(yearMonth, dailySummaries),
+    [yearMonth, dailySummaries]
+  )
+
+  const todayStr = getTodayDateString()
 
   const handleEditSave = useCallback(
     async (data: UpdateWorkSessionRequest) => {
@@ -122,13 +138,27 @@ export function DailySummaryPanel({
     [onUpdateWorkSession, onLoadSummaries, yearMonth]
   )
 
-  const openEditDialog = useCallback(
-    (target: EditTarget) => {
-      setEditTarget(target)
-      setEditDialogOpen(true)
+  const handleCreateSave = useCallback(
+    async (data: CreateManualWorkSessionRequest) => {
+      if (!onCreateWorkSession) return false
+      const success = await onCreateWorkSession(data)
+      if (success) {
+        void onLoadSummaries(yearMonth)
+      }
+      return success
     },
-    []
+    [onCreateWorkSession, onLoadSummaries, yearMonth]
   )
+
+  const openEditDialog = useCallback((target: EditTarget) => {
+    setEditTarget(target)
+    setEditDialogOpen(true)
+  }, [])
+
+  const openAddDialog = useCallback((date: string) => {
+    setAddDialogDate(date)
+    setAddDialogOpen(true)
+  }, [])
 
   const handleMonthChange = useCallback(
     (delta: number) => {
@@ -144,8 +174,6 @@ export function DailySummaryPanel({
   useEffect(() => {
     void onLoadSummaries(yearMonth)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const allDays = generateAllDays(yearMonth, dailySummaries)
 
   return (
     <div className="h-full flex flex-col p-6 gap-6">
@@ -204,6 +232,9 @@ export function DailySummaryPanel({
                 {allDays.map((day) => {
                   const holiday = isHoliday(day.date)
                   const hasWork = day.workedSeconds > 0
+                  const isEmpty = day.sessionCount === 0
+                  const isPast = day.date < todayStr
+                  const showAddButton = onCreateWorkSession && isEmpty && isPast
                   return (
                     <tr
                       key={day.date}
@@ -217,7 +248,25 @@ export function DailySummaryPanel({
                           holiday && !hasWork ? 'text-[#A3A3A3]' : 'text-foreground'
                         }`}
                       >
-                        {formatDate(day.date)}
+                        <div className="flex items-center gap-1.5">
+                          <span>{formatDate(day.date)}</span>
+                          {showAddButton && (
+                            <button
+                              aria-label="add session"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openAddDialog(day.date)
+                              }}
+                              className="p-0.5 rounded hover:bg-muted/60 transition-colors"
+                            >
+                              <Plus
+                                className={`h-3.5 w-3.5 ${
+                                  holiday ? 'text-[#A3A3A3]' : 'text-muted-foreground'
+                                }`}
+                              />
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td
                         className={`text-sm px-4 h-11 ${
@@ -328,6 +377,13 @@ export function DailySummaryPanel({
           onSave={handleEditSave}
         />
       )}
+
+      <AddSessionDialog
+        open={addDialogOpen}
+        onOpenChange={setAddDialogOpen}
+        date={addDialogDate}
+        onSave={handleCreateSave}
+      />
     </div>
   )
 }
