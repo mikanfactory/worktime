@@ -1243,6 +1243,8 @@
                           "id": "30blz",
                           "name": "dr1c2",
                           "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
                           "children": [
                             {
                               "type": "text",
@@ -1253,6 +1255,16 @@
                               "fontFamily": "Inter",
                               "fontSize": 14,
                               "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon_font",
+                              "id": "aFpFr",
+                              "name": "h1",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "pencil",
+                              "iconFontFamily": "lucide",
+                              "fill": "$holiday-text"
                             }
                           ]
                         },
@@ -1261,6 +1273,8 @@
                           "id": "OHE7u",
                           "name": "dr1c3",
                           "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
                           "children": [
                             {
                               "type": "text",
@@ -1271,6 +1285,16 @@
                               "fontFamily": "Inter",
                               "fontSize": 14,
                               "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon_font",
+                              "id": "94V7O",
+                              "name": "h2",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "pencil",
+                              "iconFontFamily": "lucide",
+                              "fill": "$holiday-text"
                             }
                           ]
                         },
@@ -1336,6 +1360,8 @@
                           "id": "QsCUm",
                           "name": "dr2c2",
                           "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
                           "children": [
                             {
                               "type": "text",
@@ -1346,6 +1372,16 @@
                               "fontFamily": "Inter",
                               "fontSize": 14,
                               "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon_font",
+                              "id": "OzNIb",
+                              "name": "i1",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "pencil",
+                              "iconFontFamily": "lucide",
+                              "fill": "$muted-text"
                             }
                           ]
                         },
@@ -1354,6 +1390,8 @@
                           "id": "m5Yk0",
                           "name": "dr2c3",
                           "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
                           "children": [
                             {
                               "type": "text",
@@ -1364,6 +1402,16 @@
                               "fontFamily": "Inter",
                               "fontSize": 14,
                               "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon_font",
+                              "id": "HWpKo",
+                              "name": "i2",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "pencil",
+                              "iconFontFamily": "lucide",
+                              "fill": "$muted-text"
                             }
                           ]
                         },
@@ -1429,6 +1477,8 @@
                           "id": "qSxYC",
                           "name": "dr3c2",
                           "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
                           "children": [
                             {
                               "type": "text",
@@ -1439,6 +1489,16 @@
                               "fontFamily": "Inter",
                               "fontSize": 14,
                               "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon_font",
+                              "id": "6EcCp",
+                              "name": "i3",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "pencil",
+                              "iconFontFamily": "lucide",
+                              "fill": "$muted-text"
                             }
                           ]
                         },
@@ -1447,6 +1507,8 @@
                           "id": "uJPf5",
                           "name": "dr3c3",
                           "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
                           "children": [
                             {
                               "type": "text",
@@ -1457,6 +1519,16 @@
                               "fontFamily": "Inter",
                               "fontSize": 14,
                               "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon_font",
+                              "id": "QVtUQ",
+                              "name": "i4",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "pencil",
+                              "iconFontFamily": "lucide",
+                              "fill": "$muted-text"
                             }
                           ]
                         },
@@ -1522,6 +1594,8 @@
                           "id": "9ipzm",
                           "name": "dr4c2",
                           "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
                           "children": [
                             {
                               "type": "text",
@@ -1532,6 +1606,16 @@
                               "fontFamily": "Inter",
                               "fontSize": 14,
                               "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon_font",
+                              "id": "0Qa7f",
+                              "name": "i5",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "pencil",
+                              "iconFontFamily": "lucide",
+                              "fill": "$muted-text"
                             }
                           ]
                         },
@@ -1540,6 +1624,8 @@
                           "id": "yBfrO",
                           "name": "dr4c3",
                           "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
                           "children": [
                             {
                               "type": "text",
@@ -1550,6 +1636,16 @@
                               "fontFamily": "Inter",
                               "fontSize": 14,
                               "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon_font",
+                              "id": "sJooX",
+                              "name": "i6",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "pencil",
+                              "iconFontFamily": "lucide",
+                              "fill": "$muted-text"
                             }
                           ]
                         },
@@ -1608,6 +1704,8 @@
                           "id": "NE8W5",
                           "name": "dr5c2",
                           "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
                           "children": [
                             {
                               "type": "text",
@@ -1618,6 +1716,16 @@
                               "fontFamily": "Inter",
                               "fontSize": 14,
                               "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon_font",
+                              "id": "pEdrK",
+                              "name": "i7",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "pencil",
+                              "iconFontFamily": "lucide",
+                              "fill": "$muted-text"
                             }
                           ]
                         },
@@ -1626,6 +1734,8 @@
                           "id": "xry6g",
                           "name": "dr5c3",
                           "width": "fill_container",
+                          "gap": 6,
+                          "alignItems": "center",
                           "children": [
                             {
                               "type": "text",
@@ -1636,6 +1746,16 @@
                               "fontFamily": "Inter",
                               "fontSize": 14,
                               "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon_font",
+                              "id": "lwbS7",
+                              "name": "i8",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "pencil",
+                              "iconFontFamily": "lucide",
+                              "fill": "$muted-text"
                             }
                           ]
                         },
