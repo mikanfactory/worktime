@@ -367,6 +367,8 @@ export async function getDailySummaries(
       lastClockOut:
         clockOuts.length > 0 ? clockOuts[clockOuts.length - 1] : undefined,
       sessionCount: daySessions.length,
+      firstSessionId: daySessions[0].id,
+      lastSessionId: daySessions[daySessions.length - 1].id,
     });
   }
 

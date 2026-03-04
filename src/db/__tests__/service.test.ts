@@ -596,10 +596,48 @@ describe('getDailySummaries', () => {
     expect(result[0].workedSeconds).toBe(8 * 3600)
     expect(result[0].breakSeconds).toBe(0)
     expect(result[0].sessionCount).toBe(1)
+    expect(result[0].firstSessionId).toBe(1)
+    expect(result[0].lastSessionId).toBe(1)
     expect(result[1].date).toBe('2026-03-02')
     expect(result[1].workedSeconds).toBe(4 * 3600) // 5h - 1h break
     expect(result[1].breakSeconds).toBe(3600)
     expect(result[1].sessionCount).toBe(1)
+    expect(result[1].firstSessionId).toBe(2)
+    expect(result[1].lastSessionId).toBe(2)
+  })
+
+  it('returns different firstSessionId and lastSessionId for multi-session days', async () => {
+    const now = new Date()
+    mockFindMany.mockResolvedValue([
+      {
+        id: 10,
+        date: '2026-03-01',
+        clockInAt: '2026-03-01T09:00:00.000Z',
+        clockOutAt: '2026-03-01T12:00:00.000Z',
+        note: null,
+        createdAt: now,
+        updatedAt: now,
+        breaks: []
+      },
+      {
+        id: 20,
+        date: '2026-03-01',
+        clockInAt: '2026-03-01T13:00:00.000Z',
+        clockOutAt: '2026-03-01T17:00:00.000Z',
+        note: null,
+        createdAt: now,
+        updatedAt: now,
+        breaks: []
+      }
+    ])
+
+    const result = await getDailySummaries('2026-03')
+    expect(result).toHaveLength(1)
+    expect(result[0].sessionCount).toBe(2)
+    expect(result[0].firstSessionId).toBe(10)
+    expect(result[0].lastSessionId).toBe(20)
+    expect(result[0].firstClockIn).toBe('2026-03-01T09:00:00.000Z')
+    expect(result[0].lastClockOut).toBe('2026-03-01T17:00:00.000Z')
   })
 })
 

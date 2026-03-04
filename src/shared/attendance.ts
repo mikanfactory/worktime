@@ -40,6 +40,8 @@ export interface DailySummary {
   firstClockIn?: string
   lastClockOut?: string
   sessionCount: number
+  firstSessionId?: number
+  lastSessionId?: number
 }
 
 export interface MonthlySummary {
