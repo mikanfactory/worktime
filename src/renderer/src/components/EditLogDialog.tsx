@@ -56,10 +56,10 @@ export function EditSessionDialog({
     if (!summary) return
     setIsSaving(true)
     try {
-      // Note: This simplified edit only works for single-session days
-      // For multi-session days, a more sophisticated editor would be needed
+      const sessionId = summary.firstSessionId
+      if (sessionId == null) return
       const data: UpdateWorkSessionRequest = {
-        id: 0, // Will need session ID from a more detailed query
+        id: sessionId,
         clockInAt: clockInAt ? fromLocalDateTimeValue(clockInAt) : undefined,
         clockOutAt: clockOutAt ? fromLocalDateTimeValue(clockOutAt) : undefined,
         note: note.trim() || undefined
@@ -75,10 +75,11 @@ export function EditSessionDialog({
 
   const handleDelete = async () => {
     if (!summary || !onDelete) return
+    const sessionId = summary.firstSessionId
+    if (sessionId == null) return
     setIsSaving(true)
     try {
-      // Similar limitation as handleSave regarding session ID
-      const success = await onDelete(0)
+      const success = await onDelete(sessionId)
       if (success) {
         onOpenChange(false)
       }
