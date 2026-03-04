@@ -37,7 +37,7 @@ describe('MonthlySummaryPanel', () => {
         onLoadSummary={mockLoadSummary}
       />
     )
-    expect(screen.getByText('月次集計')).toBeInTheDocument()
+    expect(screen.getByText('Monthly Summary')).toBeInTheDocument()
   })
 
   it('shows summary cards with data', () => {
@@ -48,9 +48,10 @@ describe('MonthlySummaryPanel', () => {
         onLoadSummary={mockLoadSummary}
       />
     )
-    expect(screen.getByText('合計勤務時間')).toBeInTheDocument()
-    expect(screen.getByText('出勤日数')).toBeInTheDocument()
-    expect(screen.getByText('2日')).toBeInTheDocument()
+    expect(screen.getByText('Total Working Hours')).toBeInTheDocument()
+    expect(screen.getByText('Working Days')).toBeInTheDocument()
+    expect(screen.getByText('Avg Hours/Day')).toBeInTheDocument()
+    expect(screen.getByText('2 days')).toBeInTheDocument()
   })
 
   it('shows dashes when no summary', () => {
@@ -80,7 +81,7 @@ describe('MonthlySummaryPanel', () => {
     expect(mockLoadSummary).toHaveBeenCalled()
   })
 
-  it('renders daily bars', () => {
+  it('renders daily working hours chart', () => {
     render(
       <MonthlySummaryPanel
         monthlySummary={sampleSummary}
@@ -88,8 +89,10 @@ describe('MonthlySummaryPanel', () => {
         onLoadSummary={mockLoadSummary}
       />
     )
-    expect(screen.getByText('日別勤務時間')).toBeInTheDocument()
-    expect(screen.getByText('8h')).toBeInTheDocument()
-    expect(screen.getByText('5h')).toBeInTheDocument()
+    expect(screen.getByText('Daily Working Hours')).toBeInTheDocument()
+    // Day of week labels
+    expect(screen.getByText('Sun')).toBeInTheDocument()
+    expect(screen.getByText('Mon')).toBeInTheDocument()
+    expect(screen.getByText('Sat')).toBeInTheDocument()
   })
 })
