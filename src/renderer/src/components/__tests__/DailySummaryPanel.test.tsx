@@ -54,7 +54,7 @@ describe('DailySummaryPanel', () => {
     expect(screen.getByText('Daily Summary')).toBeInTheDocument()
   })
 
-  it('shows empty message when no data', () => {
+  it('shows all days of the month even when no data', () => {
     render(
       <DailySummaryPanel
         dailySummaries={[]}
@@ -62,7 +62,11 @@ describe('DailySummaryPanel', () => {
         onLoadSummaries={mockLoadSummaries}
       />
     )
-    expect(screen.getByText('No records found for this month.')).toBeInTheDocument()
+    // Should show rows for all days of the current month (no "No records" message)
+    const rows = screen.getAllByRole('row')
+    // Header row + all days of current month
+    expect(rows.length).toBeGreaterThan(1)
+    expect(screen.queryByText('No records found for this month.')).not.toBeInTheDocument()
   })
 
   it('renders daily summaries', () => {
@@ -120,9 +124,9 @@ describe('DailySummaryPanel', () => {
     )
 
     const rows = screen.getAllByRole('row')
-    // First row is header, second is first data row
+    // First row is header, second is first data row (03/01)
     await user.click(rows[1])
-    expect(onDateClick).toHaveBeenCalledWith('2026-03-01')
+    expect(onDateClick).toHaveBeenCalledWith(expect.stringMatching(/^2026-03-01$/))
   })
 
   it('renders pencil icons next to clock-in and clock-out times', () => {
@@ -134,7 +138,7 @@ describe('DailySummaryPanel', () => {
         onUpdateWorkSession={mockUpdateWorkSession}
       />
     )
-    // Each data row has 2 pencil icon buttons (clock in + clock out)
+    // Each data row with data has 2 pencil icon buttons (clock in + clock out)
     const editButtons = screen.getAllByRole('button', { name: /edit/i })
     expect(editButtons.length).toBe(4) // 2 rows x 2 icons
   })
