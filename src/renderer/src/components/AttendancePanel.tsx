@@ -1,17 +1,23 @@
 import { useEffect, useState } from 'react'
-import { Play, LogOut } from 'lucide-react'
+import { Play, LogOut, Coffee, ArrowRight } from 'lucide-react'
 import type { AttendanceSummary } from '../../../shared/attendance'
 
 interface AttendancePanelProps {
   summary: AttendanceSummary
-  onLogAttendance: () => Promise<boolean>
+  onClockIn: () => Promise<boolean>
+  onClockOut: () => Promise<boolean>
+  onStartBreak: () => Promise<boolean>
+  onEndBreak: () => Promise<boolean>
   onRefreshSummary: () => Promise<void>
   error?: string | null
 }
 
 export function AttendancePanel({
   summary,
-  onLogAttendance,
+  onClockIn,
+  onClockOut,
+  onStartBreak,
+  onEndBreak,
   onRefreshSummary,
   error
 }: AttendancePanelProps) {
@@ -31,14 +37,14 @@ export function AttendancePanel({
     }
 
     const timer = setInterval(() => {
-      setElapsedSeconds((current) => current + 1)
+      setElapsedSeconds((current) => current + (summary.isOnBreak ? 0 : 1))
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [summary.isWorking])
+  }, [summary.isWorking, summary.isOnBreak])
 
-  const handleClockAction = async () => {
-    const success = await onLogAttendance()
+  const handleAction = async (action: () => Promise<boolean>) => {
+    const success = await action()
     if (!success) {
       return
     }
@@ -75,7 +81,7 @@ export function AttendancePanel({
 
         <div className="flex items-center gap-6">
           <button
-            onClick={summary.isWorking ? undefined : handleClockAction}
+            onClick={summary.isWorking ? undefined : () => handleAction(onClockIn)}
             className="flex flex-col items-center justify-center gap-2 rounded-full transition-opacity"
             style={{
               width: 120,
@@ -89,15 +95,47 @@ export function AttendancePanel({
             <span className="text-sm font-semibold text-white">Clock In</span>
           </button>
 
+          {summary.isWorking && !summary.isOnBreak && (
+            <button
+              onClick={() => handleAction(onStartBreak)}
+              className="flex flex-col items-center justify-center gap-2 rounded-full transition-opacity"
+              style={{
+                width: 120,
+                height: 120,
+                backgroundColor: '#F5A623',
+                cursor: 'pointer'
+              }}
+            >
+              <Coffee className="h-8 w-8 text-white" />
+              <span className="text-sm font-semibold text-white">Break</span>
+            </button>
+          )}
+
+          {summary.isOnBreak && (
+            <button
+              onClick={() => handleAction(onEndBreak)}
+              className="flex flex-col items-center justify-center gap-2 rounded-full transition-opacity"
+              style={{
+                width: 120,
+                height: 120,
+                backgroundColor: '#4A90D9',
+                cursor: 'pointer'
+              }}
+            >
+              <ArrowRight className="h-8 w-8 text-white" />
+              <span className="text-sm font-semibold text-white">Resume</span>
+            </button>
+          )}
+
           <button
-            onClick={summary.isWorking ? handleClockAction : undefined}
+            onClick={summary.isWorking && !summary.isOnBreak ? () => handleAction(onClockOut) : undefined}
             className="flex flex-col items-center justify-center gap-2 rounded-full transition-opacity"
             style={{
               width: 120,
               height: 120,
               backgroundColor: '#E57373',
-              opacity: summary.isWorking ? 1 : 0.5,
-              cursor: summary.isWorking ? 'pointer' : 'default'
+              opacity: summary.isWorking && !summary.isOnBreak ? 1 : 0.5,
+              cursor: summary.isWorking && !summary.isOnBreak ? 'pointer' : 'default'
             }}
           >
             <LogOut className="h-8 w-8 text-white" />
@@ -110,9 +148,15 @@ export function AttendancePanel({
             <span className="text-xs font-medium text-muted-foreground">Status</span>
             <span
               className="text-base font-semibold"
-              style={{ color: summary.isWorking ? '#90C695' : '#737373' }}
+              style={{
+                color: summary.isOnBreak
+                  ? '#F5A623'
+                  : summary.isWorking
+                    ? '#90C695'
+                    : '#737373'
+              }}
             >
-              {summary.isWorking ? 'Working' : 'Not Working'}
+              {summary.isOnBreak ? 'On Break' : summary.isWorking ? 'Working' : 'Not Working'}
             </span>
           </div>
           <div className="flex flex-col items-center gap-1">

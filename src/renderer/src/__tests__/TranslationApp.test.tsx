@@ -2,18 +2,30 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import AttendanceApp from '../TranslationApp'
 import type {
-  AttendanceLogRequest,
-  AttendanceLogsPage,
+  WorkSession,
+  BreakSession,
   AttendanceSummary,
-  GetAttendanceLogsRequest,
+  DailySummary,
+  MonthlySummary,
   GetTodaySummaryRequest,
+  UpdateWorkSessionRequest,
+  DeleteWorkSessionRequest,
+  GetDailySummariesRequest,
+  GetMonthlySummaryRequest,
   Result
 } from '../../../shared/attendance'
 
 type MockApi = {
-  logAttendance: ReturnType<typeof vi.fn<(req: AttendanceLogRequest) => Promise<Result<{ id: number }>>>>
-  getAttendanceLogs: ReturnType<typeof vi.fn<(req?: GetAttendanceLogsRequest) => Promise<Result<AttendanceLogsPage>>>>
+  clockIn: ReturnType<typeof vi.fn<(note?: string) => Promise<Result<WorkSession>>>>
+  clockOut: ReturnType<typeof vi.fn<() => Promise<Result<WorkSession>>>>
+  startBreak: ReturnType<typeof vi.fn<(note?: string) => Promise<Result<BreakSession>>>>
+  endBreak: ReturnType<typeof vi.fn<() => Promise<Result<BreakSession>>>>
   getTodaySummary: ReturnType<typeof vi.fn<(req?: GetTodaySummaryRequest) => Promise<Result<AttendanceSummary>>>>
+  updateWorkSession: ReturnType<typeof vi.fn<(req: UpdateWorkSessionRequest) => Promise<Result<WorkSession>>>>
+  deleteWorkSession: ReturnType<typeof vi.fn<(req: DeleteWorkSessionRequest) => Promise<Result<void>>>>
+  createManualWorkSession: ReturnType<typeof vi.fn<(req: { date: string; clockInAt: string; clockOutAt: string }) => Promise<Result<WorkSession>>>>
+  getDailySummaries: ReturnType<typeof vi.fn<(req: GetDailySummariesRequest) => Promise<Result<DailySummary[]>>>>
+  getMonthlySummary: ReturnType<typeof vi.fn<(req: GetMonthlySummaryRequest) => Promise<Result<MonthlySummary>>>>
 }
 
 let mockApi: MockApi
@@ -21,17 +33,40 @@ let mockApi: MockApi
 beforeEach(() => {
   vi.clearAllMocks()
   mockApi = {
-    logAttendance: vi.fn<(req: AttendanceLogRequest) => Promise<Result<{ id: number }>>>().mockResolvedValue({
+    clockIn: vi.fn().mockResolvedValue({
       ok: true,
-      data: { id: 1 }
+      data: {
+        id: 1, date: '2026-03-01', clockInAt: '2026-03-01T09:00:00.000Z',
+        breaks: [], createdAt: '2026-03-01T09:00:00.000Z', updatedAt: '2026-03-01T09:00:00.000Z'
+      }
     }),
-    getAttendanceLogs: vi.fn<(req?: GetAttendanceLogsRequest) => Promise<Result<AttendanceLogsPage>>>().mockResolvedValue({
+    clockOut: vi.fn().mockResolvedValue({
       ok: true,
-      data: { logs: [] }
+      data: {
+        id: 1, date: '2026-03-01', clockInAt: '2026-03-01T09:00:00.000Z',
+        clockOutAt: '2026-03-01T17:00:00.000Z',
+        breaks: [], createdAt: '2026-03-01T09:00:00.000Z', updatedAt: '2026-03-01T17:00:00.000Z'
+      }
     }),
-    getTodaySummary: vi.fn<(req?: GetTodaySummaryRequest) => Promise<Result<AttendanceSummary>>>().mockResolvedValue({
+    startBreak: vi.fn().mockResolvedValue({
       ok: true,
-      data: { workedSeconds: 0, isWorking: false }
+      data: { id: 10, workSessionId: 1, startAt: '2026-03-01T12:00:00.000Z' }
+    }),
+    endBreak: vi.fn().mockResolvedValue({
+      ok: true,
+      data: { id: 10, workSessionId: 1, startAt: '2026-03-01T12:00:00.000Z', endAt: '2026-03-01T13:00:00.000Z' }
+    }),
+    getTodaySummary: vi.fn().mockResolvedValue({
+      ok: true,
+      data: { workedSeconds: 0, breakSeconds: 0, isWorking: false, isOnBreak: false }
+    }),
+    updateWorkSession: vi.fn().mockResolvedValue({ ok: true, data: {} }),
+    deleteWorkSession: vi.fn().mockResolvedValue({ ok: true, data: undefined }),
+    createManualWorkSession: vi.fn().mockResolvedValue({ ok: true, data: {} }),
+    getDailySummaries: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+    getMonthlySummary: vi.fn().mockResolvedValue({
+      ok: true,
+      data: { yearMonth: '2026-03', totalWorkedSeconds: 0, totalBreakSeconds: 0, workingDays: 0, dailySummaries: [] }
     })
   }
 
@@ -52,20 +87,10 @@ describe('AttendanceApp', () => {
     })
   })
 
-  it('should load logs when switching to attendance history tab', async () => {
+  it('should switch between tabs', async () => {
     render(<AttendanceApp />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Attendance History' }))
-
-    await waitFor(() => {
-      expect(mockApi.getAttendanceLogs).toHaveBeenCalled()
-    })
-  })
-
-  it('should switch back to attendance panel when attendance tab is clicked', async () => {
-    render(<AttendanceApp />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Attendance History' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Daily Summary' }))
     fireEvent.click(screen.getByRole('button', { name: 'Attendance' }))
 
     await waitFor(() => {

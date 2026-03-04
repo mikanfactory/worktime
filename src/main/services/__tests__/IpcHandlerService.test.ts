@@ -12,11 +12,14 @@ vi.mock('electron', () => ({
 }))
 
 vi.mock('../../../db/service', () => ({
-  saveAttendanceLog: vi.fn(),
-  getAttendanceLogs: vi.fn(),
+  createWorkSession: vi.fn(),
+  endWorkSession: vi.fn(),
+  createBreakSession: vi.fn(),
+  endBreakSession: vi.fn(),
   getTodaySummary: vi.fn(),
-  updateAttendanceLog: vi.fn(),
-  deleteAttendanceLog: vi.fn(),
+  updateWorkSession: vi.fn(),
+  deleteWorkSession: vi.fn(),
+  createManualWorkSession: vi.fn(),
   getDailySummaries: vi.fn(),
   getMonthlySummary: vi.fn()
 }))
@@ -33,223 +36,114 @@ beforeEach(() => {
     delete handlers[key]
   }
   attendanceService = new AttendanceService()
-  vi.spyOn(attendanceService, 'logAttendance').mockResolvedValue({ ok: true, data: { id: 1 } })
-  vi.spyOn(attendanceService, 'getLogs').mockResolvedValue({ ok: true, data: { logs: [] } })
+  vi.spyOn(attendanceService, 'clockIn').mockResolvedValue({
+    ok: true,
+    data: {
+      id: 1, date: '2026-03-01', clockInAt: '2026-03-01T09:00:00.000Z',
+      breaks: [], createdAt: '2026-03-01T09:00:00.000Z', updatedAt: '2026-03-01T09:00:00.000Z'
+    }
+  })
+  vi.spyOn(attendanceService, 'clockOut').mockResolvedValue({
+    ok: true,
+    data: {
+      id: 1, date: '2026-03-01', clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z',
+      breaks: [], createdAt: '2026-03-01T09:00:00.000Z', updatedAt: '2026-03-01T17:00:00.000Z'
+    }
+  })
+  vi.spyOn(attendanceService, 'startBreak').mockResolvedValue({
+    ok: true,
+    data: { id: 10, workSessionId: 1, startAt: '2026-03-01T12:00:00.000Z' }
+  })
+  vi.spyOn(attendanceService, 'endBreak').mockResolvedValue({
+    ok: true,
+    data: { id: 10, workSessionId: 1, startAt: '2026-03-01T12:00:00.000Z', endAt: '2026-03-01T13:00:00.000Z' }
+  })
   vi.spyOn(attendanceService, 'getTodaySummary').mockResolvedValue({
     ok: true,
-    data: { workedSeconds: 0, isWorking: false }
+    data: { workedSeconds: 0, breakSeconds: 0, isWorking: false, isOnBreak: false }
+  })
+  vi.spyOn(attendanceService, 'createManualWorkSession').mockResolvedValue({
+    ok: true,
+    data: {
+      id: 5, date: '2026-03-01', clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z',
+      breaks: [], createdAt: '2026-03-01T09:00:00.000Z', updatedAt: '2026-03-01T17:00:00.000Z'
+    }
   })
 
   service = new IpcHandlerService(attendanceService)
   service.registerHandlers()
 })
 
-describe('attendance:log validation', () => {
-  const invoke = (payload: unknown) => handlers['attendance:log'](null, payload)
+describe('attendance:clockIn validation', () => {
+  const invoke = (payload: unknown) => handlers['attendance:clockIn'](null, payload)
 
-  it('should accept valid clock_in request', async () => {
-    const result = await invoke({ eventType: 'clock_in' })
-    expect(result).toEqual({ ok: true, data: { id: 1 } })
-    expect(attendanceService.logAttendance).toHaveBeenCalledWith({
-      eventType: 'clock_in',
-      note: undefined,
-      occurredAt: undefined
-    })
+  it('should accept undefined payload', async () => {
+    const result = await invoke(undefined)
+    expect(result).toMatchObject({ ok: true })
   })
 
-  it('should accept valid request with note and occurredAt', async () => {
-    await invoke({
-      eventType: 'clock_out',
-      note: 'Early leave',
-      occurredAt: '2024-01-01T17:00:00Z'
-    })
-    expect(attendanceService.logAttendance).toHaveBeenCalledWith({
-      eventType: 'clock_out',
-      note: 'Early leave',
-      occurredAt: '2024-01-01T17:00:00Z'
-    })
+  it('should accept payload with note', async () => {
+    const result = await invoke({ note: 'Remote' })
+    expect(result).toMatchObject({ ok: true })
+    expect(attendanceService.clockIn).toHaveBeenCalledWith('Remote')
   })
 
   it('should reject non-object payload', async () => {
     const result = await invoke('not-object')
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('object')
-    })
-  })
-
-  it('should reject null payload', async () => {
-    const result = await invoke(null)
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('object')
-    })
-  })
-
-  it('should reject invalid eventType', async () => {
-    const result = await invoke({ eventType: 'invalid_type' })
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('eventType')
-    })
-  })
-
-  it('should reject missing eventType', async () => {
-    const result = await invoke({})
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('eventType')
-    })
+    expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
   })
 
   it('should reject note longer than 1000 chars', async () => {
-    const result = await invoke({
-      eventType: 'clock_in',
-      note: 'a'.repeat(1001)
-    })
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('note')
-    })
+    const result = await invoke({ note: 'a'.repeat(1001) })
+    expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
   })
 
   it('should accept note with exactly 1000 chars', async () => {
-    const result = await invoke({
-      eventType: 'clock_in',
-      note: 'a'.repeat(1000)
-    })
-    expect(result).toEqual({ ok: true, data: { id: 1 } })
+    const result = await invoke({ note: 'a'.repeat(1000) })
+    expect(result).toMatchObject({ ok: true })
   })
 
   it('should reject non-string note', async () => {
-    const result = await invoke({ eventType: 'clock_in', note: 123 })
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('note')
-    })
+    const result = await invoke({ note: 123 })
+    expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
   })
 
-  it('should reject invalid occurredAt format', async () => {
-    const result = await invoke({
-      eventType: 'clock_in',
-      occurredAt: 'not-a-date'
-    })
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('occurredAt')
-    })
-  })
-
-  it('should accept all valid event types', async () => {
-    for (const eventType of ['clock_in', 'clock_out', 'break_start', 'break_end']) {
-      const result = await invoke({ eventType })
-      expect(result).toEqual({ ok: true, data: { id: 1 } })
-    }
+  it('should trim whitespace-only note to undefined', async () => {
+    await invoke({ note: '   ' })
+    expect(attendanceService.clockIn).toHaveBeenCalledWith(undefined)
   })
 })
 
-describe('attendance:getLogs validation', () => {
-  const invoke = (payload: unknown) => handlers['attendance:getLogs'](null, payload)
+describe('attendance:clockOut', () => {
+  it('should call clockOut with no arguments', async () => {
+    const result = await handlers['attendance:clockOut'](null, undefined)
+    expect(result).toMatchObject({ ok: true })
+    expect(attendanceService.clockOut).toHaveBeenCalled()
+  })
+})
 
-  it('should accept empty/null/undefined payload', async () => {
-    expect(await invoke(undefined)).toEqual(expect.objectContaining({ ok: true }))
-    expect(await invoke(null)).toEqual(expect.objectContaining({ ok: true }))
+describe('attendance:startBreak validation', () => {
+  const invoke = (payload: unknown) => handlers['attendance:startBreak'](null, payload)
+
+  it('should accept undefined payload', async () => {
+    const result = await invoke(undefined)
+    expect(result).toMatchObject({ ok: true })
   })
 
-  it('should accept valid request with all params', async () => {
-    const result = await invoke({
-      from: '2024-01-01T00:00:00Z',
-      to: '2024-01-02T00:00:00Z',
-      limit: 100,
-      cursor: 'abc123'
-    })
-    expect(result).toEqual(expect.objectContaining({ ok: true }))
+  it('should accept payload with note', async () => {
+    const result = await invoke({ note: 'Lunch' })
+    expect(result).toMatchObject({ ok: true })
+    expect(attendanceService.startBreak).toHaveBeenCalledWith('Lunch')
   })
+})
 
-  it('should reject non-object payload', async () => {
-    const result = await invoke('string')
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('object')
-    })
-  })
-
-  it('should reject invalid from date', async () => {
-    const result = await invoke({ from: 'not-a-date' })
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('from')
-    })
-  })
-
-  it('should reject invalid to date', async () => {
-    const result = await invoke({ to: 'not-a-date' })
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('to')
-    })
-  })
-
-  it('should reject non-string cursor', async () => {
-    const result = await invoke({ cursor: 123 })
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('cursor')
-    })
-  })
-
-  it('should reject non-number limit', async () => {
-    const result = await invoke({ limit: 'fifty' })
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('limit')
-    })
-  })
-
-  it('should reject limit below 1', async () => {
-    const result = await invoke({ limit: 0 })
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('limit')
-    })
-  })
-
-  it('should reject limit above 200', async () => {
-    const result = await invoke({ limit: 201 })
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('limit')
-    })
-  })
-
-  it('should reject non-integer limit', async () => {
-    const result = await invoke({ limit: 50.5 })
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('limit')
-    })
-  })
-
-  it('should default limit to 50 when not provided', async () => {
-    await invoke({})
-    expect(attendanceService.getLogs).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 50 })
-    )
+describe('attendance:endBreak', () => {
+  it('should call endBreak with no arguments', async () => {
+    const result = await handlers['attendance:endBreak'](null, undefined)
+    expect(result).toMatchObject({ ok: true })
+    expect(attendanceService.endBreak).toHaveBeenCalled()
   })
 })
 
@@ -258,153 +152,168 @@ describe('attendance:getTodaySummary validation', () => {
     handlers['attendance:getTodaySummary'](null, payload)
 
   it('should accept empty/null/undefined payload', async () => {
-    expect(await invoke(undefined)).toEqual(expect.objectContaining({ ok: true }))
-    expect(await invoke(null)).toEqual(expect.objectContaining({ ok: true }))
+    expect(await invoke(undefined)).toMatchObject({ ok: true })
+    expect(await invoke(null)).toMatchObject({ ok: true })
   })
 
   it('should accept valid date', async () => {
-    const result = await invoke({ date: '2024-01-01T00:00:00Z' })
-    expect(result).toEqual(expect.objectContaining({ ok: true }))
+    const result = await invoke({ date: '2026-01-01T00:00:00Z' })
+    expect(result).toMatchObject({ ok: true })
   })
 
   it('should reject non-object payload', async () => {
     const result = await invoke(42)
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('object')
-    })
+    expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
   })
 
   it('should reject invalid date format', async () => {
     const result = await invoke({ date: 'invalid' })
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('date')
-    })
+    expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
   })
 })
 
-describe('attendance:updateLog', () => {
-  async function invokeHandler(channel: string, payload: unknown) {
-    const handler = handlers[channel]
-    if (!handler) throw new Error(`No handler for ${channel}`)
-    return handler(null, payload)
-  }
+describe('attendance:updateWorkSession', () => {
+  const invoke = (payload: unknown) =>
+    handlers['attendance:updateWorkSession'](null, payload)
 
   it('rejects non-object payload', async () => {
-    const result = await invokeHandler('attendance:updateLog', 'invalid')
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: 'attendance:updateLog payload must be an object'
-    })
+    const result = await invoke('invalid')
+    expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
   })
 
   it('rejects missing id', async () => {
-    const result = await invokeHandler('attendance:updateLog', { note: 'test' })
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: 'id must be a positive integer'
-    })
+    const result = await invoke({ note: 'test' })
+    expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
   })
 
   it('rejects non-positive id', async () => {
-    const result = await invokeHandler('attendance:updateLog', { id: 0 })
-    expect(result).toEqual({
-      ok: false,
-      code: 'VALIDATION_ERROR',
-      message: 'id must be a positive integer'
-    })
+    const result = await invoke({ id: 0 })
+    expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
   })
 
-  it('rejects invalid eventType', async () => {
-    const result = await invokeHandler('attendance:updateLog', {
-      id: 1,
-      eventType: 'invalid'
-    })
-    expect(result).toMatchObject({
-      ok: false,
-      code: 'VALIDATION_ERROR'
-    })
+  it('rejects invalid clockInAt', async () => {
+    const result = await invoke({ id: 1, clockInAt: 'not-a-date' })
+    expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
   })
 
-  it('rejects invalid timestamp', async () => {
-    const result = await invokeHandler('attendance:updateLog', {
-      id: 1,
-      timestamp: 'not-a-date'
-    })
-    expect(result).toMatchObject({
-      ok: false,
-      code: 'VALIDATION_ERROR'
-    })
+  it('rejects invalid clockOutAt', async () => {
+    const result = await invoke({ id: 1, clockOutAt: 'not-a-date' })
+    expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
   })
 
   it('rejects note over 1000 chars', async () => {
-    const result = await invokeHandler('attendance:updateLog', {
-      id: 1,
-      note: 'x'.repeat(1001)
-    })
-    expect(result).toMatchObject({
-      ok: false,
-      code: 'VALIDATION_ERROR'
-    })
+    const result = await invoke({ id: 1, note: 'x'.repeat(1001) })
+    expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
   })
 
   it('accepts valid update request', async () => {
-    const result = await invokeHandler('attendance:updateLog', {
+    const result = await invoke({
       id: 1,
-      eventType: 'clock_out',
-      timestamp: '2026-03-01T17:00:00.000Z',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z',
       note: 'test'
     })
-    // It will call through to the service (which will fail due to mock),
-    // but validation should pass
     expect(result).toBeDefined()
   })
 })
 
-describe('attendance:deleteLog', () => {
-  async function invokeHandler(channel: string, payload: unknown) {
-    const handler = handlers[channel]
-    if (!handler) throw new Error(`No handler for ${channel}`)
-    return handler(null, payload)
-  }
+describe('attendance:deleteWorkSession', () => {
+  const invoke = (payload: unknown) =>
+    handlers['attendance:deleteWorkSession'](null, payload)
 
   it('rejects non-object payload', async () => {
-    const result = await invokeHandler('attendance:deleteLog', null)
+    const result = await invoke(null)
     expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
   })
 
   it('rejects non-positive id', async () => {
-    const result = await invokeHandler('attendance:deleteLog', { id: -1 })
+    const result = await invoke({ id: -1 })
     expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
   })
 
   it('accepts valid delete request', async () => {
-    const result = await invokeHandler('attendance:deleteLog', { id: 1 })
+    const result = await invoke({ id: 1 })
+    expect(result).toBeDefined()
+  })
+})
+
+describe('attendance:createManualWorkSession', () => {
+  const invoke = (payload: unknown) =>
+    handlers['attendance:createManualWorkSession'](null, payload)
+
+  it('rejects non-object payload', async () => {
+    const result = await invoke('invalid')
+    expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
+  })
+
+  it('rejects invalid date format', async () => {
+    const result = await invoke({
+      date: '2026-3-1',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z'
+    })
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'VALIDATION_ERROR',
+      message: 'date must match YYYY-MM-DD format'
+    })
+  })
+
+  it('rejects missing date', async () => {
+    const result = await invoke({
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z'
+    })
+    expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
+  })
+
+  it('rejects invalid clockInAt', async () => {
+    const result = await invoke({
+      date: '2026-03-01',
+      clockInAt: 'not-a-date',
+      clockOutAt: '2026-03-01T17:00:00.000Z'
+    })
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'VALIDATION_ERROR',
+      message: 'clockInAt must be a valid ISO8601 string'
+    })
+  })
+
+  it('rejects invalid clockOutAt', async () => {
+    const result = await invoke({
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: 'not-a-date'
+    })
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'VALIDATION_ERROR',
+      message: 'clockOutAt must be a valid ISO8601 string'
+    })
+  })
+
+  it('accepts valid request', async () => {
+    const result = await invoke({
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z'
+    })
     expect(result).toBeDefined()
   })
 })
 
 describe('attendance:getDailySummaries', () => {
-  async function invokeHandler(channel: string, payload: unknown) {
-    const handler = handlers[channel]
-    if (!handler) throw new Error(`No handler for ${channel}`)
-    return handler(null, payload)
-  }
+  const invoke = (payload: unknown) =>
+    handlers['attendance:getDailySummaries'](null, payload)
 
   it('rejects non-object payload', async () => {
-    const result = await invokeHandler('attendance:getDailySummaries', 'invalid')
+    const result = await invoke('invalid')
     expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
   })
 
   it('rejects invalid yearMonth format', async () => {
-    const result = await invokeHandler('attendance:getDailySummaries', {
-      yearMonth: '2026-3'
-    })
+    const result = await invoke({ yearMonth: '2026-3' })
     expect(result).toMatchObject({
       ok: false,
       code: 'VALIDATION_ERROR',
@@ -413,36 +322,27 @@ describe('attendance:getDailySummaries', () => {
   })
 
   it('rejects missing yearMonth', async () => {
-    const result = await invokeHandler('attendance:getDailySummaries', {})
+    const result = await invoke({})
     expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
   })
 
   it('accepts valid yearMonth', async () => {
-    const result = await invokeHandler('attendance:getDailySummaries', {
-      yearMonth: '2026-03'
-    })
+    const result = await invoke({ yearMonth: '2026-03' })
     expect(result).toBeDefined()
   })
 })
 
 describe('attendance:getMonthlySummary', () => {
-  async function invokeHandler(channel: string, payload: unknown) {
-    const handler = handlers[channel]
-    if (!handler) throw new Error(`No handler for ${channel}`)
-    return handler(null, payload)
-  }
+  const invoke = (payload: unknown) =>
+    handlers['attendance:getMonthlySummary'](null, payload)
 
   it('rejects invalid yearMonth format', async () => {
-    const result = await invokeHandler('attendance:getMonthlySummary', {
-      yearMonth: 'March 2026'
-    })
+    const result = await invoke({ yearMonth: 'March 2026' })
     expect(result).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
   })
 
   it('accepts valid yearMonth', async () => {
-    const result = await invokeHandler('attendance:getMonthlySummary', {
-      yearMonth: '2026-03'
-    })
+    const result = await invoke({ yearMonth: '2026-03' })
     expect(result).toBeDefined()
   })
 })

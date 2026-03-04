@@ -2,33 +2,45 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useAttendance } from '../useAttendance'
 import type {
-  AttendanceLogRequest,
-  AttendanceLogsPage,
+  WorkSession,
+  BreakSession,
   AttendanceSummary,
-  GetAttendanceLogsRequest,
+  CreateManualWorkSessionRequest,
+  DailySummary,
+  MonthlySummary,
   GetTodaySummaryRequest,
-  Result
+  Result,
+  UpdateWorkSessionRequest,
+  DeleteWorkSessionRequest,
+  GetDailySummariesRequest,
+  GetMonthlySummaryRequest
 } from '../../../../shared/attendance'
 
 type MockApi = {
-  logAttendance: ReturnType<typeof vi.fn<(req: AttendanceLogRequest) => Promise<Result<{ id: number }>>>>
-  getAttendanceLogs: ReturnType<typeof vi.fn<(req?: GetAttendanceLogsRequest) => Promise<Result<AttendanceLogsPage>>>>
+  clockIn: ReturnType<typeof vi.fn<(note?: string) => Promise<Result<WorkSession>>>>
+  clockOut: ReturnType<typeof vi.fn<() => Promise<Result<WorkSession>>>>
+  startBreak: ReturnType<typeof vi.fn<(note?: string) => Promise<Result<BreakSession>>>>
+  endBreak: ReturnType<typeof vi.fn<() => Promise<Result<BreakSession>>>>
   getTodaySummary: ReturnType<typeof vi.fn<(req?: GetTodaySummaryRequest) => Promise<Result<AttendanceSummary>>>>
-  updateAttendanceLog: ReturnType<typeof vi.fn>
-  deleteAttendanceLog: ReturnType<typeof vi.fn>
-  getDailySummaries: ReturnType<typeof vi.fn>
-  getMonthlySummary: ReturnType<typeof vi.fn>
+  updateWorkSession: ReturnType<typeof vi.fn<(req: UpdateWorkSessionRequest) => Promise<Result<WorkSession>>>>
+  deleteWorkSession: ReturnType<typeof vi.fn<(req: DeleteWorkSessionRequest) => Promise<Result<void>>>>
+  createManualWorkSession: ReturnType<typeof vi.fn<(req: CreateManualWorkSessionRequest) => Promise<Result<WorkSession>>>>
+  getDailySummaries: ReturnType<typeof vi.fn<(req: GetDailySummariesRequest) => Promise<Result<DailySummary[]>>>>
+  getMonthlySummary: ReturnType<typeof vi.fn<(req: GetMonthlySummaryRequest) => Promise<Result<MonthlySummary>>>>
 }
 
 let mockApi: MockApi
 
 beforeEach(() => {
   mockApi = {
-    logAttendance: vi.fn(),
-    getAttendanceLogs: vi.fn(),
+    clockIn: vi.fn(),
+    clockOut: vi.fn(),
+    startBreak: vi.fn(),
+    endBreak: vi.fn(),
     getTodaySummary: vi.fn(),
-    updateAttendanceLog: vi.fn(),
-    deleteAttendanceLog: vi.fn(),
+    updateWorkSession: vi.fn(),
+    deleteWorkSession: vi.fn(),
+    createManualWorkSession: vi.fn(),
     getDailySummaries: vi.fn(),
     getMonthlySummary: vi.fn()
   }
@@ -44,197 +56,32 @@ describe('initial state', () => {
   it('should start with idle status and empty data', () => {
     mockApi.getTodaySummary.mockResolvedValue({
       ok: true,
-      data: { workedSeconds: 0, isWorking: false }
+      data: { workedSeconds: 0, breakSeconds: 0, isWorking: false, isOnBreak: false }
     })
 
     const { result } = renderHook(() => useAttendance())
 
-    expect(result.current.logs).toEqual([])
-    expect(result.current.summary).toEqual({ workedSeconds: 0, isWorking: false })
+    expect(result.current.summary).toEqual({
+      workedSeconds: 0,
+      breakSeconds: 0,
+      isWorking: false,
+      isOnBreak: false
+    })
     expect(result.current.status).toBe('idle')
     expect(result.current.error).toBeNull()
-    expect(result.current.hasMoreLogs).toBe(false)
     expect(result.current.isLoading).toBe(false)
     expect(result.current.isLoggingAttendance).toBe(false)
   })
 })
 
-describe('loadLogs', () => {
-  it('should transition to loading then success', async () => {
-    const logs = [
-      { id: 1, eventType: 'clock_in' as const, timestamp: '2024-01-01T09:00:00Z', createdAt: '2024-01-01T09:00:00Z' }
-    ]
-    mockApi.getAttendanceLogs.mockResolvedValue({
-      ok: true,
-      data: { logs, nextCursor: undefined }
-    })
-
-    const { result } = renderHook(() => useAttendance())
-
-    await act(async () => {
-      await result.current.loadLogs()
-    })
-
-    expect(result.current.logs).toEqual(logs)
-    expect(result.current.status).toBe('success')
-    expect(result.current.isLogsLoading).toBe(false)
-  })
-
-  it('should set error on API failure result', async () => {
-    mockApi.getAttendanceLogs.mockResolvedValue({
-      ok: false,
-      code: 'DB_ERROR',
-      message: 'Database error'
-    })
-
-    const { result } = renderHook(() => useAttendance())
-
-    await act(async () => {
-      await result.current.loadLogs()
-    })
-
-    expect(result.current.status).toBe('error')
-    expect(result.current.error).toBe('Database error')
-  })
-
-  it('should set error on exception', async () => {
-    mockApi.getAttendanceLogs.mockRejectedValue(new Error('Network failure'))
-
-    const { result } = renderHook(() => useAttendance())
-
-    await act(async () => {
-      await result.current.loadLogs()
-    })
-
-    expect(result.current.status).toBe('error')
-    expect(result.current.error).toBe('Network failure')
-  })
-
-  it('should handle non-Error exceptions', async () => {
-    mockApi.getAttendanceLogs.mockRejectedValue('string error')
-
-    const { result } = renderHook(() => useAttendance())
-
-    await act(async () => {
-      await result.current.loadLogs()
-    })
-
-    expect(result.current.error).toBe('Unknown error')
-  })
-
-  it('should pass request parameters to API', async () => {
-    mockApi.getAttendanceLogs.mockResolvedValue({
-      ok: true,
-      data: { logs: [] }
-    })
-
-    const { result } = renderHook(() => useAttendance())
-    const request = { from: '2024-01-01', limit: 10 }
-
-    await act(async () => {
-      await result.current.loadLogs(request)
-    })
-
-    expect(mockApi.getAttendanceLogs).toHaveBeenCalledWith(request)
-  })
-
-  it('should set hasMoreLogs when nextCursor exists', async () => {
-    mockApi.getAttendanceLogs.mockResolvedValue({
-      ok: true,
-      data: { logs: [], nextCursor: 'abc123' }
-    })
-
-    const { result } = renderHook(() => useAttendance())
-
-    await act(async () => {
-      await result.current.loadLogs()
-    })
-
-    expect(result.current.hasMoreLogs).toBe(true)
-    expect(result.current.nextCursor).toBe('abc123')
-  })
-})
-
-describe('loadMoreLogs', () => {
-  it('should do nothing if no nextCursor', async () => {
-    const { result } = renderHook(() => useAttendance())
-
-    await act(async () => {
-      await result.current.loadMoreLogs()
-    })
-
-    expect(mockApi.getAttendanceLogs).not.toHaveBeenCalled()
-  })
-
-  it('should append new logs and deduplicate by id', async () => {
-    mockApi.getAttendanceLogs
-      .mockResolvedValueOnce({
-        ok: true,
-        data: {
-          logs: [
-            { id: 1, eventType: 'clock_in' as const, timestamp: '2024-01-01T09:00:00Z', createdAt: '2024-01-01T09:00:00Z' }
-          ],
-          nextCursor: 'cursor1'
-        }
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        data: {
-          logs: [
-            { id: 1, eventType: 'clock_in' as const, timestamp: '2024-01-01T09:00:00Z', createdAt: '2024-01-01T09:00:00Z' },
-            { id: 2, eventType: 'clock_out' as const, timestamp: '2024-01-01T17:00:00Z', createdAt: '2024-01-01T17:00:00Z' }
-          ],
-          nextCursor: undefined
-        }
-      })
-
-    const { result } = renderHook(() => useAttendance())
-
-    await act(async () => {
-      await result.current.loadLogs()
-    })
-    expect(result.current.logs).toHaveLength(1)
-
-    await act(async () => {
-      await result.current.loadMoreLogs()
-    })
-    expect(result.current.logs).toHaveLength(2)
-    expect(result.current.logs[1].id).toBe(2)
-  })
-
-  it('should set error on loadMore failure', async () => {
-    mockApi.getAttendanceLogs
-      .mockResolvedValueOnce({
-        ok: true,
-        data: { logs: [{ id: 1, eventType: 'clock_in' as const, timestamp: 't', createdAt: 't' }], nextCursor: 'c' }
-      })
-      .mockResolvedValueOnce({
-        ok: false,
-        code: 'DB_ERROR',
-        message: 'Failed'
-      })
-
-    const { result } = renderHook(() => useAttendance())
-
-    await act(async () => {
-      await result.current.loadLogs()
-    })
-
-    await act(async () => {
-      await result.current.loadMoreLogs()
-    })
-
-    expect(result.current.status).toBe('error')
-    expect(result.current.error).toBe('Failed')
-  })
-})
-
 describe('loadTodaySummary', () => {
   it('should update summary on success', async () => {
-    const summary = {
-      firstClockIn: '2024-01-01T09:00:00Z',
+    const summary: AttendanceSummary = {
+      firstClockIn: '2026-03-01T09:00:00Z',
       workedSeconds: 3600,
-      isWorking: true
+      breakSeconds: 0,
+      isWorking: true,
+      isOnBreak: false
     }
     mockApi.getTodaySummary.mockResolvedValue({ ok: true, data: summary })
 
@@ -278,15 +125,21 @@ describe('loadTodaySummary', () => {
   })
 })
 
-describe('logAttendance', () => {
+describe('clockIn', () => {
   it('should return true on success', async () => {
-    mockApi.logAttendance.mockResolvedValue({ ok: true, data: { id: 1 } })
+    mockApi.clockIn.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 1, date: '2026-03-01', clockInAt: '2026-03-01T09:00:00Z',
+        breaks: [], createdAt: '2026-03-01T09:00:00Z', updatedAt: '2026-03-01T09:00:00Z'
+      }
+    })
 
     const { result } = renderHook(() => useAttendance())
-    let success: boolean = false
+    let success = false
 
     await act(async () => {
-      success = await result.current.logAttendance('clock_in')
+      success = await result.current.clockIn()
     })
 
     expect(success).toBe(true)
@@ -295,62 +148,144 @@ describe('logAttendance', () => {
   })
 
   it('should return false on failure result', async () => {
-    mockApi.logAttendance.mockResolvedValue({
+    mockApi.clockIn.mockResolvedValue({
       ok: false,
       code: 'DB_ERROR',
-      message: 'Log failed'
+      message: 'Already clocked in'
     })
 
     const { result } = renderHook(() => useAttendance())
-    let success: boolean = true
+    let success = true
 
     await act(async () => {
-      success = await result.current.logAttendance('clock_in')
+      success = await result.current.clockIn()
     })
 
     expect(success).toBe(false)
-    expect(result.current.error).toBe('Log failed')
+    expect(result.current.error).toBe('Already clocked in')
   })
 
   it('should return false on exception', async () => {
-    mockApi.logAttendance.mockRejectedValue(new Error('Network error'))
+    mockApi.clockIn.mockRejectedValue(new Error('Network error'))
 
     const { result } = renderHook(() => useAttendance())
-    let success: boolean = true
+    let success = true
 
     await act(async () => {
-      success = await result.current.logAttendance('clock_in')
+      success = await result.current.clockIn()
     })
 
     expect(success).toBe(false)
     expect(result.current.error).toBe('Network error')
   })
 
-  it('should pass eventType and note to API', async () => {
-    mockApi.logAttendance.mockResolvedValue({ ok: true, data: { id: 1 } })
+  it('should pass note to API', async () => {
+    mockApi.clockIn.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 1, date: '2026-03-01', clockInAt: '2026-03-01T09:00:00Z',
+        breaks: [], createdAt: '2026-03-01T09:00:00Z', updatedAt: '2026-03-01T09:00:00Z'
+      }
+    })
 
     const { result } = renderHook(() => useAttendance())
 
     await act(async () => {
-      await result.current.logAttendance('clock_out', 'Early leave')
+      await result.current.clockIn('Remote')
     })
 
-    expect(mockApi.logAttendance).toHaveBeenCalledWith({
-      eventType: 'clock_out',
-      note: 'Early leave'
+    expect(mockApi.clockIn).toHaveBeenCalledWith('Remote')
+  })
+})
+
+describe('clockOut', () => {
+  it('should return true on success', async () => {
+    mockApi.clockOut.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 1, date: '2026-03-01', clockInAt: '2026-03-01T09:00:00Z',
+        clockOutAt: '2026-03-01T17:00:00Z',
+        breaks: [], createdAt: '2026-03-01T09:00:00Z', updatedAt: '2026-03-01T17:00:00Z'
+      }
     })
+
+    const { result } = renderHook(() => useAttendance())
+    let success = false
+
+    await act(async () => {
+      success = await result.current.clockOut()
+    })
+
+    expect(success).toBe(true)
+  })
+})
+
+describe('startBreak', () => {
+  it('should return true on success', async () => {
+    mockApi.startBreak.mockResolvedValue({
+      ok: true,
+      data: { id: 10, workSessionId: 1, startAt: '2026-03-01T12:00:00Z' }
+    })
+
+    const { result } = renderHook(() => useAttendance())
+    let success = false
+
+    await act(async () => {
+      success = await result.current.startBreak()
+    })
+
+    expect(success).toBe(true)
+  })
+
+  it('should return false on failure', async () => {
+    mockApi.startBreak.mockResolvedValue({
+      ok: false,
+      code: 'DB_ERROR',
+      message: 'No open session'
+    })
+
+    const { result } = renderHook(() => useAttendance())
+    let success = true
+
+    await act(async () => {
+      success = await result.current.startBreak()
+    })
+
+    expect(success).toBe(false)
+    expect(result.current.error).toBe('No open session')
+  })
+})
+
+describe('endBreak', () => {
+  it('should return true on success', async () => {
+    mockApi.endBreak.mockResolvedValue({
+      ok: true,
+      data: { id: 10, workSessionId: 1, startAt: '2026-03-01T12:00:00Z', endAt: '2026-03-01T13:00:00Z' }
+    })
+
+    const { result } = renderHook(() => useAttendance())
+    let success = false
+
+    await act(async () => {
+      success = await result.current.endBreak()
+    })
+
+    expect(success).toBe(true)
   })
 })
 
 describe('loadDailySummaries', () => {
   it('loads daily summaries', async () => {
-    const mockSummaries = [
+    const mockSummaries: DailySummary[] = [
       {
         date: '2026-03-01',
         workedSeconds: 28800,
+        breakSeconds: 3600,
         firstClockIn: '2026-03-01T09:00:00.000Z',
         lastClockOut: '2026-03-01T17:00:00.000Z',
-        logCount: 2
+        sessionCount: 1,
+        firstSessionId: 1,
+        lastSessionId: 1
       }
     ]
 
@@ -389,9 +324,10 @@ describe('loadDailySummaries', () => {
 
 describe('loadMonthlySummary', () => {
   it('loads monthly summary', async () => {
-    const mockSummary = {
+    const mockSummary: MonthlySummary = {
       yearMonth: '2026-03',
       totalWorkedSeconds: 57600,
+      totalBreakSeconds: 3600,
       workingDays: 2,
       dailySummaries: []
     }
@@ -412,25 +348,24 @@ describe('loadMonthlySummary', () => {
   })
 })
 
-describe('updateLog', () => {
-  it('updates a log', async () => {
-    mockApi.updateAttendanceLog.mockResolvedValue({
+describe('updateWorkSession', () => {
+  it('updates a work session', async () => {
+    mockApi.updateWorkSession.mockResolvedValue({
       ok: true,
       data: {
-        id: 1,
-        eventType: 'clock_out',
-        timestamp: '2026-03-01T17:00:00.000Z',
-        createdAt: '2026-03-01T09:00:00.000Z'
+        id: 1, date: '2026-03-01', clockInAt: '2026-03-01T09:30:00Z',
+        clockOutAt: '2026-03-01T17:00:00Z',
+        breaks: [], createdAt: '2026-03-01T09:00:00Z', updatedAt: '2026-03-01T17:00:00Z'
       }
     })
 
     const { result } = renderHook(() => useAttendance())
+    let success = false
 
-    let success: boolean = false
     await act(async () => {
-      success = await result.current.updateLog({
+      success = await result.current.updateWorkSession({
         id: 1,
-        eventType: 'clock_out'
+        clockInAt: '2026-03-01T09:30:00Z'
       })
     })
 
@@ -438,21 +373,69 @@ describe('updateLog', () => {
   })
 })
 
-describe('deleteLog', () => {
-  it('deletes a log', async () => {
-    mockApi.deleteAttendanceLog.mockResolvedValue({
+describe('deleteWorkSession', () => {
+  it('deletes a work session', async () => {
+    mockApi.deleteWorkSession.mockResolvedValue({
       ok: true,
       data: undefined
     })
 
     const { result } = renderHook(() => useAttendance())
+    let success = false
 
-    let success: boolean = false
     await act(async () => {
-      success = await result.current.deleteLog(1)
+      success = await result.current.deleteWorkSession(1)
     })
 
     expect(success).toBe(true)
+  })
+})
+
+describe('createManualWorkSession', () => {
+  it('returns true on success', async () => {
+    mockApi.createManualWorkSession.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 5, date: '2026-03-01', clockInAt: '2026-03-01T09:00:00Z',
+        clockOutAt: '2026-03-01T17:00:00Z',
+        breaks: [], createdAt: '2026-03-01T09:00:00Z', updatedAt: '2026-03-01T17:00:00Z'
+      }
+    })
+
+    const { result } = renderHook(() => useAttendance())
+    let success = false
+
+    await act(async () => {
+      success = await result.current.createManualWorkSession({
+        date: '2026-03-01',
+        clockInAt: '2026-03-01T09:00:00Z',
+        clockOutAt: '2026-03-01T17:00:00Z'
+      })
+    })
+
+    expect(success).toBe(true)
+  })
+
+  it('returns false on failure', async () => {
+    mockApi.createManualWorkSession.mockResolvedValue({
+      ok: false,
+      code: 'DB_ERROR',
+      message: 'clockOutAt must be after clockInAt'
+    })
+
+    const { result } = renderHook(() => useAttendance())
+    let success = true
+
+    await act(async () => {
+      success = await result.current.createManualWorkSession({
+        date: '2026-03-01',
+        clockInAt: '2026-03-01T17:00:00Z',
+        clockOutAt: '2026-03-01T09:00:00Z'
+      })
+    })
+
+    expect(success).toBe(false)
+    expect(result.current.error).toBe('clockOutAt must be after clockInAt')
   })
 })
 
@@ -470,17 +453,6 @@ describe('getAttendanceApi fallback', () => {
     })
   })
 
-  it('should set error on loadLogs when no API is available', async () => {
-    const { result } = renderHook(() => useAttendance())
-
-    await act(async () => {
-      await result.current.loadLogs()
-    })
-
-    expect(result.current.error).toBe('IPC bridge is not available')
-    expect(result.current.status).toBe('error')
-  })
-
   it('should set error on loadTodaySummary when no API is available', async () => {
     const { result } = renderHook(() => useAttendance())
 
@@ -492,12 +464,12 @@ describe('getAttendanceApi fallback', () => {
     expect(result.current.status).toBe('error')
   })
 
-  it('should return false on logAttendance when no API is available', async () => {
+  it('should return false on clockIn when no API is available', async () => {
     const { result } = renderHook(() => useAttendance())
     let success = true
 
     await act(async () => {
-      success = await result.current.logAttendance('clock_in')
+      success = await result.current.clockIn()
     })
 
     expect(success).toBe(false)
@@ -505,55 +477,47 @@ describe('getAttendanceApi fallback', () => {
     expect(result.current.isLoggingAttendance).toBe(false)
   })
 
-  it('should set error on loadMoreLogs when no API is available', async () => {
-    // First set up with a valid API to get a cursor
-    Object.defineProperty(window, 'api', {
-      value: {
-        logAttendance: vi.fn(),
-        getAttendanceLogs: vi.fn().mockResolvedValue({
-          ok: true,
-          data: {
-            logs: [{ id: 1, eventType: 'clock_in', timestamp: 't', createdAt: 't' }],
-            nextCursor: 'cursor1'
-          }
-        }),
-        getTodaySummary: vi.fn()
-      },
-      writable: true,
-      configurable: true
-    })
-
+  it('should return false on clockOut when no API is available', async () => {
     const { result } = renderHook(() => useAttendance())
+    let success = true
 
     await act(async () => {
-      await result.current.loadLogs()
+      success = await result.current.clockOut()
     })
 
-    // Now remove API
-    Object.defineProperty(window, 'api', {
-      value: undefined,
-      writable: true,
-      configurable: true
-    })
-    Object.defineProperty(window, 'electron', {
-      value: undefined,
-      writable: true,
-      configurable: true
-    })
-
-    await act(async () => {
-      await result.current.loadMoreLogs()
-    })
-
+    expect(success).toBe(false)
     expect(result.current.error).toBe('IPC bridge is not available')
   })
 
-  it('should handle non-Error exception on logAttendance', async () => {
+  it('should return false on startBreak when no API is available', async () => {
+    const { result } = renderHook(() => useAttendance())
+    let success = true
+
+    await act(async () => {
+      success = await result.current.startBreak()
+    })
+
+    expect(success).toBe(false)
+    expect(result.current.error).toBe('IPC bridge is not available')
+  })
+
+  it('should return false on endBreak when no API is available', async () => {
+    const { result } = renderHook(() => useAttendance())
+    let success = true
+
+    await act(async () => {
+      success = await result.current.endBreak()
+    })
+
+    expect(success).toBe(false)
+    expect(result.current.error).toBe('IPC bridge is not available')
+  })
+
+  it('should handle non-Error exception on clockIn', async () => {
     Object.defineProperty(window, 'api', {
       value: {
-        logAttendance: vi.fn().mockRejectedValue('string error'),
-        getAttendanceLogs: vi.fn(),
-        getTodaySummary: vi.fn()
+        ...mockApi,
+        clockIn: vi.fn().mockRejectedValue('string error')
       },
       writable: true,
       configurable: true
@@ -563,7 +527,7 @@ describe('getAttendanceApi fallback', () => {
     let success = true
 
     await act(async () => {
-      success = await result.current.logAttendance('clock_in')
+      success = await result.current.clockIn()
     })
 
     expect(success).toBe(false)
@@ -573,8 +537,7 @@ describe('getAttendanceApi fallback', () => {
   it('should handle non-Error exception on loadTodaySummary', async () => {
     Object.defineProperty(window, 'api', {
       value: {
-        logAttendance: vi.fn(),
-        getAttendanceLogs: vi.fn(),
+        ...mockApi,
         getTodaySummary: vi.fn().mockRejectedValue('summary error')
       },
       writable: true,
@@ -585,38 +548,6 @@ describe('getAttendanceApi fallback', () => {
 
     await act(async () => {
       await result.current.loadTodaySummary()
-    })
-
-    expect(result.current.error).toBe('Unknown error')
-  })
-
-  it('should handle non-Error exception on loadMoreLogs', async () => {
-    Object.defineProperty(window, 'api', {
-      value: {
-        logAttendance: vi.fn(),
-        getAttendanceLogs: vi.fn()
-          .mockResolvedValueOnce({
-            ok: true,
-            data: {
-              logs: [{ id: 1, eventType: 'clock_in', timestamp: 't', createdAt: 't' }],
-              nextCursor: 'c'
-            }
-          })
-          .mockRejectedValueOnce('load more error'),
-        getTodaySummary: vi.fn()
-      },
-      writable: true,
-      configurable: true
-    })
-
-    const { result } = renderHook(() => useAttendance())
-
-    await act(async () => {
-      await result.current.loadLogs()
-    })
-
-    await act(async () => {
-      await result.current.loadMoreLogs()
     })
 
     expect(result.current.error).toBe('Unknown error')

@@ -5,12 +5,17 @@ import type { AttendanceSummary } from '../../../../shared/attendance'
 
 const defaultSummary: AttendanceSummary = {
   workedSeconds: 0,
-  isWorking: false
+  breakSeconds: 0,
+  isWorking: false,
+  isOnBreak: false
 }
 
 const defaultProps = {
   summary: defaultSummary,
-  onLogAttendance: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
+  onClockIn: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
+  onClockOut: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
+  onStartBreak: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
+  onEndBreak: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
   onRefreshSummary: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
   error: null
 }
@@ -49,7 +54,6 @@ describe('formatElapsedTime display', () => {
 describe('button display', () => {
   it('should show Clock In and Clock Out buttons', () => {
     render(<AttendancePanel {...defaultProps} />)
-    // "Clock In" appears both in the button and status info
     expect(screen.getAllByText('Clock In').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('Clock Out')).toBeInTheDocument()
   })
@@ -63,6 +67,36 @@ describe('button display', () => {
     render(<AttendancePanel {...defaultProps} />)
     expect(screen.getByText('Status')).toBeInTheDocument()
     expect(screen.getByText('Today')).toBeInTheDocument()
+  })
+
+  it('should show Break button when working and not on break', () => {
+    render(
+      <AttendancePanel
+        {...defaultProps}
+        summary={{ ...defaultSummary, isWorking: true, isOnBreak: false }}
+      />
+    )
+    expect(screen.getByText('Break')).toBeInTheDocument()
+  })
+
+  it('should show Resume button when on break', () => {
+    render(
+      <AttendancePanel
+        {...defaultProps}
+        summary={{ ...defaultSummary, isWorking: true, isOnBreak: true }}
+      />
+    )
+    expect(screen.getByText('Resume')).toBeInTheDocument()
+  })
+
+  it('should show On Break status when on break', () => {
+    render(
+      <AttendancePanel
+        {...defaultProps}
+        summary={{ ...defaultSummary, isWorking: true, isOnBreak: true }}
+      />
+    )
+    expect(screen.getByText('On Break')).toBeInTheDocument()
   })
 })
 
@@ -106,49 +140,61 @@ describe('timer countdown', () => {
 
     expect(screen.getByText('00:01:40')).toBeInTheDocument()
   })
+
+  it('should not increment when on break', async () => {
+    render(
+      <AttendancePanel
+        {...defaultProps}
+        summary={{ ...defaultSummary, workedSeconds: 100, isWorking: true, isOnBreak: true }}
+      />
+    )
+
+    await act(() => {
+      vi.advanceTimersByTime(3000)
+    })
+
+    expect(screen.getByText('00:01:40')).toBeInTheDocument()
+  })
 })
 
 describe('interactions', () => {
-  it('should call onLogAttendance and onRefreshSummary on Clock In click', async () => {
-    const onLogAttendance = vi.fn<() => Promise<boolean>>().mockResolvedValue(true)
+  it('should call onClockIn and onRefreshSummary on Clock In click', async () => {
+    const onClockIn = vi.fn<() => Promise<boolean>>().mockResolvedValue(true)
     const onRefreshSummary = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
 
     render(
       <AttendancePanel
         {...defaultProps}
-        onLogAttendance={onLogAttendance}
+        onClockIn={onClockIn}
         onRefreshSummary={onRefreshSummary}
       />
     )
 
-    // Find the Clock In button (the one inside the circular button, not the status label)
     const clockInButtons = screen.getAllByText('Clock In')
     const clockInBtn = clockInButtons.find(el => el.closest('button'))?.closest('button')
     fireEvent.click(clockInBtn!)
 
     await waitFor(() => {
-      expect(onLogAttendance).toHaveBeenCalled()
+      expect(onClockIn).toHaveBeenCalled()
     })
 
     await waitFor(() => {
-      // onRefreshSummary is called once on mount and once after clock in
       expect(onRefreshSummary.mock.calls.length).toBeGreaterThanOrEqual(2)
     })
   })
 
-  it('should not call onRefreshSummary if onLogAttendance returns false', async () => {
-    const onLogAttendance = vi.fn<() => Promise<boolean>>().mockResolvedValue(false)
+  it('should not call onRefreshSummary if onClockIn returns false', async () => {
+    const onClockIn = vi.fn<() => Promise<boolean>>().mockResolvedValue(false)
     const onRefreshSummary = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
 
     render(
       <AttendancePanel
         {...defaultProps}
-        onLogAttendance={onLogAttendance}
+        onClockIn={onClockIn}
         onRefreshSummary={onRefreshSummary}
       />
     )
 
-    // Reset to count only post-click calls
     onRefreshSummary.mockClear()
 
     const clockInButtons = screen.getAllByText('Clock In')
@@ -156,10 +202,9 @@ describe('interactions', () => {
     fireEvent.click(clockInBtn!)
 
     await waitFor(() => {
-      expect(onLogAttendance).toHaveBeenCalled()
+      expect(onClockIn).toHaveBeenCalled()
     })
 
-    // onRefreshSummary should not be called after a failed logAttendance
     expect(onRefreshSummary).not.toHaveBeenCalled()
   })
 })

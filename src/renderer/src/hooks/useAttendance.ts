@@ -1,54 +1,52 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import type {
-  AttendanceLog,
-  AttendanceLogRequest,
-  AttendanceLogsPage,
-  AttendanceEventType,
+  WorkSession,
+  BreakSession,
   AttendanceSummary,
+  CreateManualWorkSessionRequest,
   DailySummary,
-  DeleteAttendanceLogRequest,
-  GetAttendanceLogsRequest,
+  DeleteWorkSessionRequest,
   GetDailySummariesRequest,
   GetMonthlySummaryRequest,
   GetTodaySummaryRequest,
   MonthlySummary,
   Result,
-  UpdateAttendanceLogRequest
+  UpdateWorkSessionRequest
 } from '../../../shared/attendance'
 
 type AttendanceStatus = 'idle' | 'loading' | 'success' | 'error'
 
 type AttendanceApi = {
-  logAttendance: (request: AttendanceLogRequest) => Promise<Result<{ id: number }>>
-  getAttendanceLogs: (request?: GetAttendanceLogsRequest) => Promise<Result<AttendanceLogsPage>>
+  clockIn: (note?: string) => Promise<Result<WorkSession>>
+  clockOut: () => Promise<Result<WorkSession>>
+  startBreak: (note?: string) => Promise<Result<BreakSession>>
+  endBreak: () => Promise<Result<BreakSession>>
   getTodaySummary: (request?: GetTodaySummaryRequest) => Promise<Result<AttendanceSummary>>
-  updateAttendanceLog: (request: UpdateAttendanceLogRequest) => Promise<Result<AttendanceLog>>
-  deleteAttendanceLog: (request: DeleteAttendanceLogRequest) => Promise<Result<void>>
+  updateWorkSession: (request: UpdateWorkSessionRequest) => Promise<Result<WorkSession>>
+  deleteWorkSession: (request: DeleteWorkSessionRequest) => Promise<Result<void>>
+  createManualWorkSession: (request: CreateManualWorkSessionRequest) => Promise<Result<WorkSession>>
   getDailySummaries: (request: GetDailySummariesRequest) => Promise<Result<DailySummary[]>>
   getMonthlySummary: (request: GetMonthlySummaryRequest) => Promise<Result<MonthlySummary>>
 }
 
 interface UseAttendanceResult {
-  logs: AttendanceLog[]
   summary: AttendanceSummary
   dailySummaries: DailySummary[]
   monthlySummary: MonthlySummary | null
-  nextCursor: string | undefined
-  hasMoreLogs: boolean
   status: AttendanceStatus
   isLoading: boolean
   isLoggingAttendance: boolean
-  isLogsLoading: boolean
-  isLoadingMore: boolean
   error: string | null
-  loadLogs: (request?: GetAttendanceLogsRequest) => Promise<void>
-  loadMoreLogs: () => Promise<void>
   loadTodaySummary: () => Promise<void>
-  logAttendance: (eventType: AttendanceEventType, note?: string) => Promise<boolean>
+  clockIn: (note?: string) => Promise<boolean>
+  clockOut: () => Promise<boolean>
+  startBreak: (note?: string) => Promise<boolean>
+  endBreak: () => Promise<boolean>
   loadDailySummaries: (yearMonth: string) => Promise<void>
   loadMonthlySummary: (yearMonth: string) => Promise<void>
-  updateLog: (request: UpdateAttendanceLogRequest) => Promise<boolean>
-  deleteLog: (id: number) => Promise<boolean>
+  updateWorkSession: (request: UpdateWorkSessionRequest) => Promise<boolean>
+  deleteWorkSession: (id: number) => Promise<boolean>
+  createManualWorkSession: (request: CreateManualWorkSessionRequest) => Promise<boolean>
 }
 
 function getAttendanceApi(): AttendanceApi | undefined {
@@ -57,7 +55,7 @@ function getAttendanceApi(): AttendanceApi | undefined {
   }
 
   if (window.api) {
-    return window.api
+    return window.api as AttendanceApi
   }
 
   const invoke = window.electron?.ipcRenderer?.invoke
@@ -66,16 +64,19 @@ function getAttendanceApi(): AttendanceApi | undefined {
   }
 
   return {
-    logAttendance: (request: AttendanceLogRequest) =>
-      invoke('attendance:log', request),
-    getAttendanceLogs: (request?: GetAttendanceLogsRequest) =>
-      invoke('attendance:getLogs', request),
+    clockIn: (note?: string) => invoke('attendance:clockIn', note ? { note } : undefined),
+    clockOut: () => invoke('attendance:clockOut'),
+    startBreak: (note?: string) =>
+      invoke('attendance:startBreak', note ? { note } : undefined),
+    endBreak: () => invoke('attendance:endBreak'),
     getTodaySummary: (request?: GetTodaySummaryRequest) =>
       invoke('attendance:getTodaySummary', request),
-    updateAttendanceLog: (request: UpdateAttendanceLogRequest) =>
-      invoke('attendance:updateLog', request),
-    deleteAttendanceLog: (request: DeleteAttendanceLogRequest) =>
-      invoke('attendance:deleteLog', request),
+    updateWorkSession: (request: UpdateWorkSessionRequest) =>
+      invoke('attendance:updateWorkSession', request),
+    deleteWorkSession: (request: DeleteWorkSessionRequest) =>
+      invoke('attendance:deleteWorkSession', request),
+    createManualWorkSession: (request: CreateManualWorkSessionRequest) =>
+      invoke('attendance:createManualWorkSession', request),
     getDailySummaries: (request: GetDailySummariesRequest) =>
       invoke('attendance:getDailySummaries', request),
     getMonthlySummary: (request: GetMonthlySummaryRequest) =>
@@ -84,95 +85,17 @@ function getAttendanceApi(): AttendanceApi | undefined {
 }
 
 export function useAttendance(): UseAttendanceResult {
-  const [logs, setLogs] = useState<AttendanceLog[]>([])
   const [summary, setSummary] = useState<AttendanceSummary>({
     workedSeconds: 0,
-    isWorking: false
+    breakSeconds: 0,
+    isWorking: false,
+    isOnBreak: false
   })
   const [dailySummaries, setDailySummaries] = useState<DailySummary[]>([])
   const [monthlySummary, setMonthlySummary] = useState<MonthlySummary | null>(null)
-  const [nextCursor, setNextCursor] = useState<string | undefined>(undefined)
-  const [isLogsLoading, setIsLogsLoading] = useState(false)
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [isLoggingAttendance, setIsLoggingAttendance] = useState(false)
   const [status, setStatus] = useState<AttendanceStatus>('idle')
   const [error, setError] = useState<string | null>(null)
-  const lastLogsRequestRef = useRef<GetAttendanceLogsRequest>({})
-
-  const loadLogs = useCallback(async (request: GetAttendanceLogsRequest = {}) => {
-    setIsLogsLoading(true)
-    setStatus('loading')
-    setError(null)
-    lastLogsRequestRef.current = request
-
-    const attendanceApi = getAttendanceApi()
-    if (!attendanceApi) {
-      setStatus('error')
-      setError('IPC bridge is not available')
-      setIsLogsLoading(false)
-      return
-    }
-
-    try {
-      const result = await attendanceApi.getAttendanceLogs(request)
-      if (result.ok) {
-        setLogs(result.data.logs)
-        setNextCursor(result.data.nextCursor)
-        setStatus('success')
-        return
-      }
-
-      setStatus('error')
-      setError(result.message)
-    } catch (err) {
-      setStatus('error')
-      setError(err instanceof Error ? err.message : 'Unknown error')
-    } finally {
-      setIsLogsLoading(false)
-    }
-  }, [])
-
-  const loadMoreLogs = useCallback(async () => {
-    if (!nextCursor) return
-
-    setIsLoadingMore(true)
-    setError(null)
-
-    const attendanceApi = getAttendanceApi()
-    if (!attendanceApi) {
-      setStatus('error')
-      setError('IPC bridge is not available')
-      setIsLoadingMore(false)
-      return
-    }
-
-    const request: GetAttendanceLogsRequest = {
-      ...lastLogsRequestRef.current,
-      cursor: nextCursor
-    }
-
-    try {
-      const result = await attendanceApi.getAttendanceLogs(request)
-      if (result.ok) {
-        setLogs((prevLogs) => {
-          const existingIds = new Set(prevLogs.map((log) => log.id))
-          const appendedLogs = result.data.logs.filter((log) => !existingIds.has(log.id))
-          return [...prevLogs, ...appendedLogs]
-        })
-        setNextCursor(result.data.nextCursor)
-        setStatus('success')
-        return
-      }
-
-      setStatus('error')
-      setError(result.message)
-    } catch (err) {
-      setStatus('error')
-      setError(err instanceof Error ? err.message : 'Unknown error')
-    } finally {
-      setIsLoadingMore(false)
-    }
-  }, [nextCursor])
 
   const loadTodaySummary = useCallback(async () => {
     setStatus('loading')
@@ -201,7 +124,7 @@ export function useAttendance(): UseAttendanceResult {
     }
   }, [])
 
-  const logAttendance = useCallback(async (eventType: AttendanceEventType, note?: string) => {
+  const clockIn = useCallback(async (note?: string) => {
     setIsLoggingAttendance(true)
     setStatus('loading')
     setError(null)
@@ -215,10 +138,7 @@ export function useAttendance(): UseAttendanceResult {
     }
 
     try {
-      const result = await attendanceApi.logAttendance({
-        eventType,
-        note
-      })
+      const result = await attendanceApi.clockIn(note)
       if (result.ok) {
         setStatus('success')
         return true
@@ -229,6 +149,92 @@ export function useAttendance(): UseAttendanceResult {
       return false
     } catch (err) {
       setStatus('error')
+      setError(err instanceof Error ? err.message : 'Unknown error')
+      return false
+    } finally {
+      setIsLoggingAttendance(false)
+    }
+  }, [])
+
+  const clockOut = useCallback(async () => {
+    setIsLoggingAttendance(true)
+    setStatus('loading')
+    setError(null)
+
+    const attendanceApi = getAttendanceApi()
+    if (!attendanceApi) {
+      setStatus('error')
+      setError('IPC bridge is not available')
+      setIsLoggingAttendance(false)
+      return false
+    }
+
+    try {
+      const result = await attendanceApi.clockOut()
+      if (result.ok) {
+        setStatus('success')
+        return true
+      }
+
+      setStatus('error')
+      setError(result.message)
+      return false
+    } catch (err) {
+      setStatus('error')
+      setError(err instanceof Error ? err.message : 'Unknown error')
+      return false
+    } finally {
+      setIsLoggingAttendance(false)
+    }
+  }, [])
+
+  const startBreak = useCallback(async (note?: string) => {
+    setIsLoggingAttendance(true)
+    setError(null)
+
+    const attendanceApi = getAttendanceApi()
+    if (!attendanceApi) {
+      setError('IPC bridge is not available')
+      setIsLoggingAttendance(false)
+      return false
+    }
+
+    try {
+      const result = await attendanceApi.startBreak(note)
+      if (result.ok) {
+        return true
+      }
+
+      setError(result.message)
+      return false
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+      return false
+    } finally {
+      setIsLoggingAttendance(false)
+    }
+  }, [])
+
+  const endBreak = useCallback(async () => {
+    setIsLoggingAttendance(true)
+    setError(null)
+
+    const attendanceApi = getAttendanceApi()
+    if (!attendanceApi) {
+      setError('IPC bridge is not available')
+      setIsLoggingAttendance(false)
+      return false
+    }
+
+    try {
+      const result = await attendanceApi.endBreak()
+      if (result.ok) {
+        return true
+      }
+
+      setError(result.message)
+      return false
+    } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
       return false
     } finally {
@@ -290,7 +296,7 @@ export function useAttendance(): UseAttendanceResult {
     }
   }, [])
 
-  const updateLog = useCallback(async (request: UpdateAttendanceLogRequest) => {
+  const updateWorkSession = useCallback(async (request: UpdateWorkSessionRequest) => {
     setError(null)
 
     const attendanceApi = getAttendanceApi()
@@ -300,7 +306,7 @@ export function useAttendance(): UseAttendanceResult {
     }
 
     try {
-      const result = await attendanceApi.updateAttendanceLog(request)
+      const result = await attendanceApi.updateWorkSession(request)
       if (result.ok) {
         return true
       }
@@ -313,7 +319,7 @@ export function useAttendance(): UseAttendanceResult {
     }
   }, [])
 
-  const deleteLog = useCallback(async (id: number) => {
+  const createManualWorkSession = useCallback(async (request: CreateManualWorkSessionRequest) => {
     setError(null)
 
     const attendanceApi = getAttendanceApi()
@@ -323,9 +329,31 @@ export function useAttendance(): UseAttendanceResult {
     }
 
     try {
-      const result = await attendanceApi.deleteAttendanceLog({ id })
+      const result = await attendanceApi.createManualWorkSession(request)
       if (result.ok) {
-        setLogs((prevLogs) => prevLogs.filter((log) => log.id !== id))
+        return true
+      }
+
+      setError(result.message)
+      return false
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+      return false
+    }
+  }, [])
+
+  const deleteWorkSession = useCallback(async (id: number) => {
+    setError(null)
+
+    const attendanceApi = getAttendanceApi()
+    if (!attendanceApi) {
+      setError('IPC bridge is not available')
+      return false
+    }
+
+    try {
+      const result = await attendanceApi.deleteWorkSession({ id })
+      if (result.ok) {
         return true
       }
 
@@ -338,25 +366,22 @@ export function useAttendance(): UseAttendanceResult {
   }, [])
 
   return {
-    logs,
     summary,
     dailySummaries,
     monthlySummary,
-    nextCursor,
-    hasMoreLogs: Boolean(nextCursor),
     status,
-    isLoading: status === 'loading' || isLogsLoading || isLoadingMore,
+    isLoading: status === 'loading',
     isLoggingAttendance,
-    isLogsLoading,
-    isLoadingMore,
     error,
-    loadLogs,
-    loadMoreLogs,
     loadTodaySummary,
-    logAttendance,
+    clockIn,
+    clockOut,
+    startBreak,
+    endBreak,
     loadDailySummaries,
     loadMonthlySummary,
-    updateLog,
-    deleteLog
+    updateWorkSession,
+    deleteWorkSession,
+    createManualWorkSession
   }
 }

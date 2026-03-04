@@ -6,22 +6,40 @@ vi.mock('../client', () => ({
   getPrismaClient: vi.fn()
 }))
 
-import { saveAttendanceLog, getAttendanceLogs, getTodaySummary } from '../service'
+import {
+  createWorkSession,
+  endWorkSession,
+  createBreakSession,
+  endBreakSession,
+  getTodaySummary,
+  updateWorkSession,
+  deleteWorkSession,
+  createManualWorkSession,
+  getDailySummaries,
+  getMonthlySummary
+} from '../service'
 import { getPrismaClient } from '../client'
 
 const mockCreate = vi.fn()
-const mockFindMany = vi.fn()
 const mockFindFirst = vi.fn()
+const mockFindMany = vi.fn()
 const mockUpdate = vi.fn()
 const mockDelete = vi.fn()
 
+const mockBreakCreate = vi.fn()
+const mockBreakUpdate = vi.fn()
+
 const mockPrisma = {
-  attendanceLog: {
+  workSession: {
     create: mockCreate,
-    findMany: mockFindMany,
     findFirst: mockFindFirst,
+    findMany: mockFindMany,
     update: mockUpdate,
     delete: mockDelete
+  },
+  breakSession: {
+    create: mockBreakCreate,
+    update: mockBreakUpdate
   }
 }
 
@@ -31,652 +49,681 @@ beforeEach(() => {
 })
 
 describe('calculateWorkedSeconds', () => {
-  it('returns 0 for empty events', () => {
-    const result = calculateWorkedSeconds([], false)
-    expect(result).toEqual({ workedSeconds: 0, isWorking: false })
+  it('returns 0 for zero-length session', () => {
+    const result = calculateWorkedSeconds(
+      { clockInAt: '2026-03-01T09:00:00.000Z', clockOutAt: '2026-03-01T09:00:00.000Z' },
+      []
+    )
+    expect(result).toEqual({ workedSeconds: 0, breakSeconds: 0 })
   })
 
-  it('calculates a single clock_in/clock_out pair', () => {
-    const events = [
-      { eventType: 'clock_in', timestamp: '2026-03-01T09:00:00.000Z' },
-      { eventType: 'clock_out', timestamp: '2026-03-01T17:00:00.000Z' }
-    ]
-    const result = calculateWorkedSeconds(events, false)
+  it('calculates a simple session without breaks', () => {
+    const result = calculateWorkedSeconds(
+      { clockInAt: '2026-03-01T09:00:00.000Z', clockOutAt: '2026-03-01T17:00:00.000Z' },
+      []
+    )
     expect(result.workedSeconds).toBe(8 * 3600)
-    expect(result.isWorking).toBe(false)
+    expect(result.breakSeconds).toBe(0)
   })
 
-  it('calculates multiple clock_in/clock_out pairs', () => {
-    const events = [
-      { eventType: 'clock_in', timestamp: '2026-03-01T09:00:00.000Z' },
-      { eventType: 'clock_out', timestamp: '2026-03-01T12:00:00.000Z' },
-      { eventType: 'clock_in', timestamp: '2026-03-01T13:00:00.000Z' },
-      { eventType: 'clock_out', timestamp: '2026-03-01T17:00:00.000Z' }
-    ]
-    const result = calculateWorkedSeconds(events, false)
+  it('subtracts break time from worked time', () => {
+    const result = calculateWorkedSeconds(
+      { clockInAt: '2026-03-01T09:00:00.000Z', clockOutAt: '2026-03-01T17:00:00.000Z' },
+      [{ startAt: '2026-03-01T12:00:00.000Z', endAt: '2026-03-01T13:00:00.000Z' }]
+    )
     expect(result.workedSeconds).toBe(7 * 3600)
-    expect(result.isWorking).toBe(false)
+    expect(result.breakSeconds).toBe(3600)
   })
 
-  it('handles in-progress session without counting current time', () => {
-    const events = [
-      { eventType: 'clock_in', timestamp: '2026-03-01T09:00:00.000Z' }
-    ]
-    const result = calculateWorkedSeconds(events, false)
-    expect(result.workedSeconds).toBe(0)
-    expect(result.isWorking).toBe(true)
+  it('handles multiple breaks', () => {
+    const result = calculateWorkedSeconds(
+      { clockInAt: '2026-03-01T09:00:00.000Z', clockOutAt: '2026-03-01T18:00:00.000Z' },
+      [
+        { startAt: '2026-03-01T12:00:00.000Z', endAt: '2026-03-01T13:00:00.000Z' },
+        { startAt: '2026-03-01T15:00:00.000Z', endAt: '2026-03-01T15:30:00.000Z' }
+      ]
+    )
+    // 9h total - 1h break - 0.5h break = 7.5h
+    expect(result.workedSeconds).toBe(7.5 * 3600)
+    expect(result.breakSeconds).toBe(1.5 * 3600)
   })
 
-  it('handles in-progress session counting current time', () => {
-    const now = Date.now()
-    const clockInTime = new Date(now - 3600 * 1000).toISOString()
-    const events = [{ eventType: 'clock_in', timestamp: clockInTime }]
-    const result = calculateWorkedSeconds(events, true)
-    expect(result.workedSeconds).toBeGreaterThanOrEqual(3599)
-    expect(result.workedSeconds).toBeLessThanOrEqual(3601)
-    expect(result.isWorking).toBe(true)
+  it('handles in-progress session (null clockOutAt) using now', () => {
+    const now = new Date('2026-03-01T15:00:00.000Z').getTime()
+    const result = calculateWorkedSeconds(
+      { clockInAt: '2026-03-01T09:00:00.000Z', clockOutAt: null },
+      [],
+      now
+    )
+    expect(result.workedSeconds).toBe(6 * 3600)
   })
 
-  it('ignores duplicate clock_in events', () => {
-    const events = [
-      { eventType: 'clock_in', timestamp: '2026-03-01T09:00:00.000Z' },
-      { eventType: 'clock_in', timestamp: '2026-03-01T10:00:00.000Z' },
-      { eventType: 'clock_out', timestamp: '2026-03-01T12:00:00.000Z' }
-    ]
-    const result = calculateWorkedSeconds(events, false)
+  it('handles in-progress break (null endAt) using now', () => {
+    const now = new Date('2026-03-01T13:00:00.000Z').getTime()
+    const result = calculateWorkedSeconds(
+      { clockInAt: '2026-03-01T09:00:00.000Z', clockOutAt: null },
+      [{ startAt: '2026-03-01T12:00:00.000Z', endAt: null }],
+      now
+    )
+    // 4h total - 1h break = 3h
     expect(result.workedSeconds).toBe(3 * 3600)
-    expect(result.isWorking).toBe(false)
+    expect(result.breakSeconds).toBe(3600)
   })
 
-  it('ignores orphan clock_out events', () => {
-    const events = [
-      { eventType: 'clock_out', timestamp: '2026-03-01T08:00:00.000Z' },
-      { eventType: 'clock_in', timestamp: '2026-03-01T09:00:00.000Z' },
-      { eventType: 'clock_out', timestamp: '2026-03-01T12:00:00.000Z' }
-    ]
-    const result = calculateWorkedSeconds(events, false)
-    expect(result.workedSeconds).toBe(3 * 3600)
-    expect(result.isWorking).toBe(false)
+  it('never returns negative workedSeconds', () => {
+    const result = calculateWorkedSeconds(
+      { clockInAt: '2026-03-01T09:00:00.000Z', clockOutAt: '2026-03-01T09:00:00.000Z' },
+      []
+    )
+    expect(result.workedSeconds).toBeGreaterThanOrEqual(0)
   })
 })
 
-describe('saveAttendanceLog', () => {
-  it('should save a clock_in event with legacy type "打刻"', async () => {
-    mockCreate.mockResolvedValue({ id: 1 })
-
-    const id = await saveAttendanceLog('clock_in', '2024-01-01T09:00:00Z')
-    expect(mockCreate).toHaveBeenCalledWith({
-      data: {
-        eventType: 'clock_in',
-        type: '打刻',
-        timestamp: '2024-01-01T09:00:00Z',
-        note: null
-      }
-    })
-    expect(id).toBe(1)
-  })
-
-  it('should save a clock_out event with legacy type "退勤"', async () => {
-    mockCreate.mockResolvedValue({ id: 2 })
-
-    const id = await saveAttendanceLog('clock_out', '2024-01-01T18:00:00Z')
-    expect(mockCreate).toHaveBeenCalledWith({
-      data: {
-        eventType: 'clock_out',
-        type: '退勤',
-        timestamp: '2024-01-01T18:00:00Z',
-        note: null
-      }
-    })
-    expect(id).toBe(2)
-  })
-
-  it('should save a break_start event with legacy type "休憩開始"', async () => {
-    mockCreate.mockResolvedValue({ id: 3 })
-
-    await saveAttendanceLog('break_start', '2024-01-01T12:00:00Z')
-    expect(mockCreate).toHaveBeenCalledWith({
-      data: {
-        eventType: 'break_start',
-        type: '休憩開始',
-        timestamp: '2024-01-01T12:00:00Z',
-        note: null
-      }
-    })
-  })
-
-  it('should save a break_end event with legacy type "休憩終了"', async () => {
-    mockCreate.mockResolvedValue({ id: 4 })
-
-    await saveAttendanceLog('break_end', '2024-01-01T13:00:00Z')
-    expect(mockCreate).toHaveBeenCalledWith({
-      data: {
-        eventType: 'break_end',
-        type: '休憩終了',
-        timestamp: '2024-01-01T13:00:00Z',
-        note: null
-      }
-    })
-  })
-
-  it('should save with a note when provided', async () => {
-    mockCreate.mockResolvedValue({ id: 5 })
-
-    await saveAttendanceLog('clock_in', '2024-01-01T09:00:00Z', 'Remote work')
-    expect(mockCreate).toHaveBeenCalledWith({
-      data: {
-        eventType: 'clock_in',
-        type: '打刻',
-        timestamp: '2024-01-01T09:00:00Z',
-        note: 'Remote work'
-      }
-    })
-  })
-
-  it('should save note as null when undefined', async () => {
-    mockCreate.mockResolvedValue({ id: 6 })
-
-    await saveAttendanceLog('clock_in', '2024-01-01T09:00:00Z', undefined)
-    expect(mockCreate).toHaveBeenCalledWith({
-      data: expect.objectContaining({ note: null })
-    })
-  })
-})
-
-describe('getAttendanceLogs', () => {
-  const makeRow = (overrides: Record<string, unknown> = {}) => ({
-    id: 1,
-    eventType: 'clock_in',
-    type: '打刻',
-    timestamp: '2024-01-01T09:00:00Z',
-    note: null,
-    createdAt: new Date('2024-01-01T09:00:00Z'),
-    ...overrides
-  })
-
-  it('should return logs with default limit', async () => {
-    mockFindMany.mockResolvedValue([makeRow()])
-
-    const result = await getAttendanceLogs({})
-    expect(mockFindMany).toHaveBeenCalledWith({
-      where: undefined,
-      orderBy: [{ timestamp: 'desc' }, { id: 'desc' }],
-      take: 50
-    })
-    expect(result.logs).toHaveLength(1)
-    expect(result.logs[0]).toEqual({
+describe('createWorkSession', () => {
+  it('creates a session and returns it', async () => {
+    mockFindFirst.mockResolvedValue(null)
+    const now = new Date()
+    mockCreate.mockResolvedValue({
       id: 1,
-      eventType: 'clock_in',
-      timestamp: '2024-01-01T09:00:00Z',
-      createdAt: '2024-01-01T09:00:00.000Z'
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: null,
+      note: null,
+      createdAt: now,
+      updatedAt: now,
+      breaks: []
+    })
+
+    const result = await createWorkSession('2026-03-01T09:00:00.000Z')
+    expect(result.id).toBe(1)
+    expect(result.date).toBe('2026-03-01')
+    expect(result.clockOutAt).toBeUndefined()
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: {
+        date: '2026-03-01',
+        clockInAt: '2026-03-01T09:00:00.000Z',
+        note: null
+      },
+      include: { breaks: true }
     })
   })
 
-  it('should clamp limit to minimum of 1', async () => {
-    mockFindMany.mockResolvedValue([])
+  it('throws if an open session exists', async () => {
+    mockFindFirst.mockResolvedValue({ id: 1, clockOutAt: null })
 
-    await getAttendanceLogs({ limit: -5 })
-    expect(mockFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ take: 1 })
+    await expect(createWorkSession('2026-03-01T09:00:00.000Z')).rejects.toThrow(
+      'An open work session already exists'
     )
   })
 
-  it('should clamp limit to maximum of 200', async () => {
-    mockFindMany.mockResolvedValue([])
-
-    await getAttendanceLogs({ limit: 999 })
-    expect(mockFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ take: 200 })
-    )
-  })
-
-  it('should filter by from date', async () => {
-    mockFindMany.mockResolvedValue([])
-
-    await getAttendanceLogs({ from: '2024-01-01T00:00:00Z' })
-    expect(mockFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { AND: [{ timestamp: { gte: '2024-01-01T00:00:00Z' } }] }
-      })
-    )
-  })
-
-  it('should filter by to date', async () => {
-    mockFindMany.mockResolvedValue([])
-
-    await getAttendanceLogs({ to: '2024-01-02T00:00:00Z' })
-    expect(mockFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { AND: [{ timestamp: { lt: '2024-01-02T00:00:00Z' } }] }
-      })
-    )
-  })
-
-  it('should filter by both from and to', async () => {
-    mockFindMany.mockResolvedValue([])
-
-    await getAttendanceLogs({
-      from: '2024-01-01T00:00:00Z',
-      to: '2024-01-02T00:00:00Z'
+  it('saves with note when provided', async () => {
+    mockFindFirst.mockResolvedValue(null)
+    const now = new Date()
+    mockCreate.mockResolvedValue({
+      id: 2,
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: null,
+      note: 'Remote',
+      createdAt: now,
+      updatedAt: now,
+      breaks: []
     })
-    expect(mockFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          AND: [
-            { timestamp: { gte: '2024-01-01T00:00:00Z' } },
-            { timestamp: { lt: '2024-01-02T00:00:00Z' } }
-          ]
-        }
-      })
+
+    const result = await createWorkSession('2026-03-01T09:00:00.000Z', 'Remote')
+    expect(result.note).toBe('Remote')
+  })
+})
+
+describe('endWorkSession', () => {
+  it('closes the open session', async () => {
+    const now = new Date()
+    mockFindFirst.mockResolvedValue({
+      id: 1,
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: null,
+      breaks: []
+    })
+    mockUpdate.mockResolvedValue({
+      id: 1,
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z',
+      note: null,
+      createdAt: now,
+      updatedAt: now,
+      breaks: []
+    })
+
+    const result = await endWorkSession('2026-03-01T17:00:00.000Z')
+    expect(result.clockOutAt).toBe('2026-03-01T17:00:00.000Z')
+  })
+
+  it('throws if no open session exists', async () => {
+    mockFindFirst.mockResolvedValue(null)
+
+    await expect(endWorkSession('2026-03-01T17:00:00.000Z')).rejects.toThrow(
+      'No open work session found'
     )
   })
 
-  it('should decode cursor and add filter condition', async () => {
-    mockFindMany.mockResolvedValue([])
-    const cursor = Buffer.from(
-      JSON.stringify({ timestamp: '2024-01-01T12:00:00Z', id: 10 })
-    ).toString('base64')
+  it('throws if clockOutAt is before clockInAt', async () => {
+    mockFindFirst.mockResolvedValue({
+      id: 1,
+      clockInAt: '2026-03-01T17:00:00.000Z',
+      clockOutAt: null,
+      breaks: []
+    })
 
-    await getAttendanceLogs({ cursor })
-    expect(mockFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          AND: [
-            {
-              OR: [
-                { timestamp: { lt: '2024-01-01T12:00:00Z' } },
-                {
-                  AND: [
-                    { timestamp: '2024-01-01T12:00:00Z' },
-                    { id: { lt: 10 } }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      })
+    await expect(endWorkSession('2026-03-01T09:00:00.000Z')).rejects.toThrow(
+      'clockOutAt must be after clockInAt'
     )
   })
 
-  it('should ignore invalid cursor', async () => {
-    mockFindMany.mockResolvedValue([])
+  it('auto-closes open breaks', async () => {
+    const now = new Date()
+    mockFindFirst.mockResolvedValue({
+      id: 1,
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: null,
+      breaks: [
+        { id: 10, startAt: '2026-03-01T12:00:00.000Z', endAt: null }
+      ]
+    })
+    mockBreakUpdate.mockResolvedValue({})
+    mockUpdate.mockResolvedValue({
+      id: 1,
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z',
+      note: null,
+      createdAt: now,
+      updatedAt: now,
+      breaks: [
+        { id: 10, workSessionId: 1, startAt: '2026-03-01T12:00:00.000Z', endAt: '2026-03-01T17:00:00.000Z', note: null, createdAt: now, updatedAt: now }
+      ]
+    })
 
-    await getAttendanceLogs({ cursor: 'invalid-base64' })
-    expect(mockFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: undefined })
-    )
-  })
-
-  it('should return nextCursor when result count equals limit', async () => {
-    const rows = Array.from({ length: 3 }, (_, i) =>
-      makeRow({ id: 3 - i, timestamp: `2024-01-01T0${9 - i}:00:00Z` })
-    )
-    mockFindMany.mockResolvedValue(rows)
-
-    const result = await getAttendanceLogs({ limit: 3 })
-    expect(result.nextCursor).toBeDefined()
-
-    const decoded = JSON.parse(
-      Buffer.from(result.nextCursor!, 'base64').toString('utf8')
-    )
-    expect(decoded).toEqual({
-      timestamp: rows[2].timestamp,
-      id: rows[2].id
+    await endWorkSession('2026-03-01T17:00:00.000Z')
+    expect(mockBreakUpdate).toHaveBeenCalledWith({
+      where: { id: 10 },
+      data: { endAt: '2026-03-01T17:00:00.000Z' }
     })
   })
+})
 
-  it('should not return nextCursor when result count is less than limit', async () => {
-    mockFindMany.mockResolvedValue([makeRow()])
+describe('createBreakSession', () => {
+  it('creates a break in an open session', async () => {
+    const now = new Date()
+    mockFindFirst.mockResolvedValue({
+      id: 1,
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: null,
+      breaks: []
+    })
+    mockBreakCreate.mockResolvedValue({
+      id: 10,
+      workSessionId: 1,
+      startAt: '2026-03-01T12:00:00.000Z',
+      endAt: null,
+      note: null,
+      createdAt: now,
+      updatedAt: now
+    })
 
-    const result = await getAttendanceLogs({ limit: 50 })
-    expect(result.nextCursor).toBeUndefined()
+    const result = await createBreakSession('2026-03-01T12:00:00.000Z')
+    expect(result.id).toBe(10)
+    expect(result.endAt).toBeUndefined()
   })
 
-  it('should normalize eventType from modern field', async () => {
-    mockFindMany.mockResolvedValue([
-      makeRow({ eventType: 'clock_out', type: '打刻' })
-    ])
+  it('throws if no open session', async () => {
+    mockFindFirst.mockResolvedValue(null)
 
-    const result = await getAttendanceLogs({})
-    expect(result.logs[0].eventType).toBe('clock_out')
+    await expect(createBreakSession('2026-03-01T12:00:00.000Z')).rejects.toThrow(
+      'No open work session found'
+    )
   })
 
-  it('should normalize eventType from legacy "退勤" type', async () => {
-    mockFindMany.mockResolvedValue([
-      makeRow({ eventType: '', type: '退勤' })
-    ])
+  it('throws if open break already exists', async () => {
+    mockFindFirst.mockResolvedValue({
+      id: 1,
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: null,
+      breaks: [{ id: 10, endAt: null }]
+    })
 
-    const result = await getAttendanceLogs({})
-    expect(result.logs[0].eventType).toBe('clock_out')
+    await expect(createBreakSession('2026-03-01T13:00:00.000Z')).rejects.toThrow(
+      'An open break already exists'
+    )
   })
 
-  it('should normalize eventType from legacy "休憩開始" type', async () => {
-    mockFindMany.mockResolvedValue([
-      makeRow({ eventType: '', type: '休憩開始' })
-    ])
+  it('throws if break start is before clock-in', async () => {
+    mockFindFirst.mockResolvedValue({
+      id: 1,
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: null,
+      breaks: []
+    })
 
-    const result = await getAttendanceLogs({})
-    expect(result.logs[0].eventType).toBe('break_start')
+    await expect(createBreakSession('2026-03-01T08:00:00.000Z')).rejects.toThrow(
+      'Break start must be after clock-in time'
+    )
+  })
+})
+
+describe('endBreakSession', () => {
+  it('ends an open break', async () => {
+    const now = new Date()
+    mockFindFirst.mockResolvedValue({
+      id: 1,
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: null,
+      breaks: [{ id: 10, startAt: '2026-03-01T12:00:00.000Z', endAt: null }]
+    })
+    mockBreakUpdate.mockResolvedValue({
+      id: 10,
+      workSessionId: 1,
+      startAt: '2026-03-01T12:00:00.000Z',
+      endAt: '2026-03-01T13:00:00.000Z',
+      note: null,
+      createdAt: now,
+      updatedAt: now
+    })
+
+    const result = await endBreakSession('2026-03-01T13:00:00.000Z')
+    expect(result.endAt).toBe('2026-03-01T13:00:00.000Z')
   })
 
-  it('should normalize eventType from legacy "休憩終了" type', async () => {
-    mockFindMany.mockResolvedValue([
-      makeRow({ eventType: '', type: '休憩終了' })
-    ])
+  it('throws if no open session', async () => {
+    mockFindFirst.mockResolvedValue(null)
 
-    const result = await getAttendanceLogs({})
-    expect(result.logs[0].eventType).toBe('break_end')
+    await expect(endBreakSession('2026-03-01T13:00:00.000Z')).rejects.toThrow(
+      'No open work session found'
+    )
   })
 
-  it('should default to clock_in for unknown legacy type', async () => {
-    mockFindMany.mockResolvedValue([
-      makeRow({ eventType: '', type: 'unknown' })
-    ])
+  it('throws if no open break', async () => {
+    mockFindFirst.mockResolvedValue({
+      id: 1,
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: null,
+      breaks: [{ id: 10, startAt: '2026-03-01T12:00:00.000Z', endAt: '2026-03-01T13:00:00.000Z' }]
+    })
 
-    const result = await getAttendanceLogs({})
-    expect(result.logs[0].eventType).toBe('clock_in')
+    await expect(endBreakSession('2026-03-01T14:00:00.000Z')).rejects.toThrow(
+      'No open break found'
+    )
   })
 
-  it('should map note to undefined when null', async () => {
-    mockFindMany.mockResolvedValue([makeRow({ note: null })])
+  it('throws if endAt is before startAt', async () => {
+    mockFindFirst.mockResolvedValue({
+      id: 1,
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: null,
+      breaks: [{ id: 10, startAt: '2026-03-01T12:00:00.000Z', endAt: null }]
+    })
 
-    const result = await getAttendanceLogs({})
-    expect(result.logs[0].note).toBeUndefined()
-  })
-
-  it('should preserve note when present', async () => {
-    mockFindMany.mockResolvedValue([makeRow({ note: 'Remote' })])
-
-    const result = await getAttendanceLogs({})
-    expect(result.logs[0].note).toBe('Remote')
+    await expect(endBreakSession('2026-03-01T11:00:00.000Z')).rejects.toThrow(
+      'Break end must be after break start'
+    )
   })
 })
 
 describe('getTodaySummary', () => {
-  const dayStart = '2024-01-01T00:00:00.000Z'
-  const dayEnd = '2024-01-02T00:00:00.000Z'
-
   beforeEach(() => {
     vi.useFakeTimers()
-    vi.setSystemTime(new Date('2024-01-01T15:00:00Z'))
+    vi.setSystemTime(new Date('2026-03-01T15:00:00Z'))
   })
 
   afterEach(() => {
     vi.useRealTimers()
   })
 
-  it('should return empty summary when no events exist', async () => {
-    mockFindFirst.mockResolvedValue(null)
+  it('returns empty summary when no sessions exist', async () => {
     mockFindMany.mockResolvedValue([])
 
-    const result = await getTodaySummary(dayStart, dayEnd)
+    const result = await getTodaySummary('2026-03-01')
     expect(result).toEqual({
-      firstClockIn: undefined,
-      latestEvent: undefined,
       workedSeconds: 0,
-      isWorking: false
+      breakSeconds: 0,
+      isWorking: false,
+      isOnBreak: false
     })
   })
 
-  it('should calculate worked seconds for clock_in/clock_out pair', async () => {
-    mockFindFirst
-      .mockResolvedValueOnce({ timestamp: '2024-01-01T09:00:00Z' })
-      .mockResolvedValueOnce({ timestamp: '2024-01-01T17:00:00Z' })
+  it('calculates worked seconds for completed session', async () => {
+    const now = new Date()
     mockFindMany.mockResolvedValue([
-      { eventType: 'clock_in', timestamp: '2024-01-01T09:00:00Z' },
-      { eventType: 'clock_out', timestamp: '2024-01-01T17:00:00Z' }
+      {
+        id: 1,
+        date: '2026-03-01',
+        clockInAt: '2026-03-01T09:00:00.000Z',
+        clockOutAt: '2026-03-01T17:00:00.000Z',
+        note: null,
+        createdAt: now,
+        updatedAt: now,
+        breaks: []
+      }
     ])
 
-    const result = await getTodaySummary(dayStart, dayEnd)
+    const result = await getTodaySummary('2026-03-01')
     expect(result.workedSeconds).toBe(8 * 3600)
     expect(result.isWorking).toBe(false)
   })
 
-  it('should set isWorking=true when clocked in without clock_out', async () => {
-    mockFindFirst
-      .mockResolvedValueOnce({ timestamp: '2024-01-01T09:00:00Z' })
-      .mockResolvedValueOnce({ timestamp: '2024-01-01T09:00:00Z' })
+  it('sets isWorking=true when session is open', async () => {
+    const now = new Date()
     mockFindMany.mockResolvedValue([
-      { eventType: 'clock_in', timestamp: '2024-01-01T09:00:00Z' }
+      {
+        id: 1,
+        date: '2026-03-01',
+        clockInAt: '2026-03-01T09:00:00.000Z',
+        clockOutAt: null,
+        note: null,
+        createdAt: now,
+        updatedAt: now,
+        breaks: []
+      }
     ])
 
-    const result = await getTodaySummary(dayStart, dayEnd)
+    const result = await getTodaySummary('2026-03-01')
     expect(result.isWorking).toBe(true)
-    // 09:00 to 15:00 = 6 hours
+    // 09:00 to 15:00 = 6h
     expect(result.workedSeconds).toBe(6 * 3600)
   })
 
-  it('should handle multiple clock_in/clock_out sessions', async () => {
-    mockFindFirst
-      .mockResolvedValueOnce({ timestamp: '2024-01-01T09:00:00Z' })
-      .mockResolvedValueOnce({ timestamp: '2024-01-01T17:00:00Z' })
+  it('sets isOnBreak=true when open break exists', async () => {
+    const now = new Date()
     mockFindMany.mockResolvedValue([
-      { eventType: 'clock_in', timestamp: '2024-01-01T09:00:00Z' },
-      { eventType: 'clock_out', timestamp: '2024-01-01T12:00:00Z' },
-      { eventType: 'clock_in', timestamp: '2024-01-01T13:00:00Z' },
-      { eventType: 'clock_out', timestamp: '2024-01-01T17:00:00Z' }
+      {
+        id: 1,
+        date: '2026-03-01',
+        clockInAt: '2026-03-01T09:00:00.000Z',
+        clockOutAt: null,
+        note: null,
+        createdAt: now,
+        updatedAt: now,
+        breaks: [
+          { id: 10, workSessionId: 1, startAt: '2026-03-01T12:00:00.000Z', endAt: null, note: null, createdAt: now, updatedAt: now }
+        ]
+      }
     ])
 
-    const result = await getTodaySummary(dayStart, dayEnd)
-    // 3h + 4h = 7h
-    expect(result.workedSeconds).toBe(7 * 3600)
-    expect(result.isWorking).toBe(false)
+    const result = await getTodaySummary('2026-03-01')
+    expect(result.isWorking).toBe(true)
+    expect(result.isOnBreak).toBe(true)
+    // 6h total - 3h break = 3h
+    expect(result.workedSeconds).toBe(3 * 3600)
+    expect(result.breakSeconds).toBe(3 * 3600)
   })
 
-  it('should return firstClockIn timestamp', async () => {
-    mockFindFirst
-      .mockResolvedValueOnce({ timestamp: '2024-01-01T08:30:00Z' })
-      .mockResolvedValueOnce({ timestamp: '2024-01-01T17:00:00Z' })
-    mockFindMany.mockResolvedValue([])
-
-    const result = await getTodaySummary(dayStart, dayEnd)
-    expect(result.firstClockIn).toBe('2024-01-01T08:30:00Z')
-  })
-
-  it('should return latestEvent timestamp', async () => {
-    mockFindFirst
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ timestamp: '2024-01-01T17:30:00Z' })
-    mockFindMany.mockResolvedValue([])
-
-    const result = await getTodaySummary(dayStart, dayEnd)
-    expect(result.latestEvent).toBe('2024-01-01T17:30:00Z')
-  })
-
-  it('should ignore duplicate clock_in events', async () => {
-    mockFindFirst
-      .mockResolvedValueOnce({ timestamp: '2024-01-01T09:00:00Z' })
-      .mockResolvedValueOnce({ timestamp: '2024-01-01T10:00:00Z' })
+  it('returns currentSession when working', async () => {
+    const now = new Date()
     mockFindMany.mockResolvedValue([
-      { eventType: 'clock_in', timestamp: '2024-01-01T09:00:00Z' },
-      { eventType: 'clock_in', timestamp: '2024-01-01T09:30:00Z' },
-      { eventType: 'clock_out', timestamp: '2024-01-01T10:00:00Z' }
+      {
+        id: 1,
+        date: '2026-03-01',
+        clockInAt: '2026-03-01T09:00:00.000Z',
+        clockOutAt: null,
+        note: null,
+        createdAt: now,
+        updatedAt: now,
+        breaks: []
+      }
     ])
 
-    const result = await getTodaySummary(dayStart, dayEnd)
-    // Only first clock_in counts: 09:00 to 10:00 = 1h
-    expect(result.workedSeconds).toBe(3600)
-  })
-
-  it('should ensure workedSeconds is never negative', async () => {
-    mockFindFirst
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(null)
-    mockFindMany.mockResolvedValue([])
-
-    const result = await getTodaySummary(dayStart, dayEnd)
-    expect(result.workedSeconds).toBeGreaterThanOrEqual(0)
+    const result = await getTodaySummary('2026-03-01')
+    expect(result.currentSession).toBeDefined()
+    expect(result.currentSession?.id).toBe(1)
   })
 })
 
-describe('DB service functions with mocked Prisma', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
+describe('updateWorkSession', () => {
+  it('updates a session and returns it', async () => {
+    const now = new Date()
+    mockUpdate.mockResolvedValue({
+      id: 1,
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T09:30:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z',
+      note: 'updated',
+      createdAt: now,
+      updatedAt: now,
+      breaks: []
+    })
+
+    const result = await updateWorkSession(1, {
+      clockInAt: '2026-03-01T09:30:00.000Z',
+      note: 'updated'
+    })
+
+    expect(result.id).toBe(1)
+    expect(result.note).toBe('updated')
+    expect(mockUpdate).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: expect.objectContaining({
+        clockInAt: '2026-03-01T09:30:00.000Z',
+        note: 'updated'
+      }),
+      include: { breaks: true }
+    })
   })
 
-  describe('saveAttendanceLog', () => {
-    it('creates a record and returns the id', async () => {
-      const { saveAttendanceLog } = await import('../service')
-      mockPrisma.attendanceLog.create.mockResolvedValue({
-        id: 42,
-        eventType: 'clock_in',
-        timestamp: '2026-03-01T09:00:00.000Z',
-        note: null,
-        createdAt: new Date()
-      })
+  it('updates date when clockInAt changes', async () => {
+    const now = new Date()
+    mockUpdate.mockResolvedValue({
+      id: 1,
+      date: '2026-03-02',
+      clockInAt: '2026-03-02T09:00:00.000Z',
+      clockOutAt: null,
+      note: null,
+      createdAt: now,
+      updatedAt: now,
+      breaks: []
+    })
 
-      const id = await saveAttendanceLog(
-        'clock_in',
+    await updateWorkSession(1, { clockInAt: '2026-03-02T09:00:00.000Z' })
+    expect(mockUpdate).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: expect.objectContaining({ date: '2026-03-02' }),
+      include: { breaks: true }
+    })
+  })
+
+  it('throws for non-existent ID', async () => {
+    mockUpdate.mockRejectedValue(new Error('Record to update not found'))
+
+    await expect(updateWorkSession(999, { note: 'test' })).rejects.toThrow(
+      'Record to update not found'
+    )
+  })
+})
+
+describe('deleteWorkSession', () => {
+  it('deletes a session', async () => {
+    mockDelete.mockResolvedValue({ id: 1 })
+
+    await deleteWorkSession(1)
+    expect(mockDelete).toHaveBeenCalledWith({ where: { id: 1 } })
+  })
+
+  it('throws for non-existent ID', async () => {
+    mockDelete.mockRejectedValue(new Error('Record to delete does not exist'))
+
+    await expect(deleteWorkSession(999)).rejects.toThrow(
+      'Record to delete does not exist'
+    )
+  })
+})
+
+describe('createManualWorkSession', () => {
+  it('creates a closed session with both clockIn and clockOut', async () => {
+    const now = new Date()
+    mockCreate.mockResolvedValue({
+      id: 5,
+      date: '2026-03-01',
+      clockInAt: '2026-03-01T09:00:00.000Z',
+      clockOutAt: '2026-03-01T17:00:00.000Z',
+      note: null,
+      createdAt: now,
+      updatedAt: now,
+      breaks: []
+    })
+
+    const result = await createManualWorkSession(
+      '2026-03-01',
+      '2026-03-01T09:00:00.000Z',
+      '2026-03-01T17:00:00.000Z'
+    )
+    expect(result.id).toBe(5)
+    expect(result.clockOutAt).toBe('2026-03-01T17:00:00.000Z')
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: {
+        date: '2026-03-01',
+        clockInAt: '2026-03-01T09:00:00.000Z',
+        clockOutAt: '2026-03-01T17:00:00.000Z'
+      },
+      include: { breaks: true }
+    })
+  })
+
+  it('throws if clockOutAt is before clockInAt', async () => {
+    await expect(
+      createManualWorkSession(
+        '2026-03-01',
+        '2026-03-01T17:00:00.000Z',
         '2026-03-01T09:00:00.000Z'
       )
-      expect(id).toBe(42)
-      expect(mockPrisma.attendanceLog.create).toHaveBeenCalledWith({
-        data: {
-          eventType: 'clock_in',
-          timestamp: '2026-03-01T09:00:00.000Z',
-          note: null
-        }
-      })
-    })
+    ).rejects.toThrow('clockOutAt must be after clockInAt')
   })
 
-  describe('updateAttendanceLog', () => {
-    it('updates a record and returns the updated log', async () => {
-      const { updateAttendanceLog } = await import('../service')
-      const createdAt = new Date('2026-03-01T09:00:00.000Z')
-      mockPrisma.attendanceLog.update.mockResolvedValue({
-        id: 1,
-        eventType: 'clock_out',
-        timestamp: '2026-03-01T17:00:00.000Z',
-        note: 'updated',
-        createdAt
-      })
-
-      const result = await updateAttendanceLog(1, {
-        eventType: 'clock_out',
-        note: 'updated'
-      })
-
-      expect(result.id).toBe(1)
-      expect(result.eventType).toBe('clock_out')
-      expect(result.note).toBe('updated')
-      expect(mockPrisma.attendanceLog.update).toHaveBeenCalledWith({
-        where: { id: 1 },
-        data: { eventType: 'clock_out', note: 'updated' }
-      })
-    })
-
-    it('throws for non-existent ID', async () => {
-      const { updateAttendanceLog } = await import('../service')
-      mockPrisma.attendanceLog.update.mockRejectedValue(
-        new Error('Record to update not found')
+  it('throws if clockOutAt equals clockInAt', async () => {
+    await expect(
+      createManualWorkSession(
+        '2026-03-01',
+        '2026-03-01T09:00:00.000Z',
+        '2026-03-01T09:00:00.000Z'
       )
+    ).rejects.toThrow('clockOutAt must be after clockInAt')
+  })
+})
 
-      await expect(updateAttendanceLog(999, { note: 'test' })).rejects.toThrow(
-        'Record to update not found'
-      )
-    })
+describe('getDailySummaries', () => {
+  it('returns empty array for month with no data', async () => {
+    mockFindMany.mockResolvedValue([])
+
+    const result = await getDailySummaries('2026-03')
+    expect(result).toEqual([])
   })
 
-  describe('deleteAttendanceLog', () => {
-    it('deletes a record', async () => {
-      const { deleteAttendanceLog } = await import('../service')
-      mockPrisma.attendanceLog.delete.mockResolvedValue({
+  it('groups sessions by day and calculates summaries', async () => {
+    const now = new Date()
+    mockFindMany.mockResolvedValue([
+      {
         id: 1,
-        eventType: 'clock_in',
-        timestamp: '2026-03-01T09:00:00.000Z',
+        date: '2026-03-01',
+        clockInAt: '2026-03-01T09:00:00.000Z',
+        clockOutAt: '2026-03-01T17:00:00.000Z',
         note: null,
-        createdAt: new Date()
-      })
+        createdAt: now,
+        updatedAt: now,
+        breaks: []
+      },
+      {
+        id: 2,
+        date: '2026-03-02',
+        clockInAt: '2026-03-02T10:00:00.000Z',
+        clockOutAt: '2026-03-02T15:00:00.000Z',
+        note: null,
+        createdAt: now,
+        updatedAt: now,
+        breaks: [
+          { id: 10, workSessionId: 2, startAt: '2026-03-02T12:00:00.000Z', endAt: '2026-03-02T13:00:00.000Z', note: null, createdAt: now, updatedAt: now }
+        ]
+      }
+    ])
 
-      await deleteAttendanceLog(1)
-      expect(mockPrisma.attendanceLog.delete).toHaveBeenCalledWith({
-        where: { id: 1 }
-      })
-    })
-
-    it('throws for non-existent ID', async () => {
-      const { deleteAttendanceLog } = await import('../service')
-      mockPrisma.attendanceLog.delete.mockRejectedValue(
-        new Error('Record to delete does not exist')
-      )
-
-      await expect(deleteAttendanceLog(999)).rejects.toThrow(
-        'Record to delete does not exist'
-      )
-    })
+    const result = await getDailySummaries('2026-03')
+    expect(result).toHaveLength(2)
+    expect(result[0].date).toBe('2026-03-01')
+    expect(result[0].workedSeconds).toBe(8 * 3600)
+    expect(result[0].breakSeconds).toBe(0)
+    expect(result[0].sessionCount).toBe(1)
+    expect(result[0].firstSessionId).toBe(1)
+    expect(result[0].lastSessionId).toBe(1)
+    expect(result[1].date).toBe('2026-03-02')
+    expect(result[1].workedSeconds).toBe(4 * 3600) // 5h - 1h break
+    expect(result[1].breakSeconds).toBe(3600)
+    expect(result[1].sessionCount).toBe(1)
+    expect(result[1].firstSessionId).toBe(2)
+    expect(result[1].lastSessionId).toBe(2)
   })
 
-  describe('getDailySummaries', () => {
-    it('returns empty array for month with no data', async () => {
-      const { getDailySummaries } = await import('../service')
-      mockPrisma.attendanceLog.findMany.mockResolvedValue([])
+  it('returns different firstSessionId and lastSessionId for multi-session days', async () => {
+    const now = new Date()
+    mockFindMany.mockResolvedValue([
+      {
+        id: 10,
+        date: '2026-03-01',
+        clockInAt: '2026-03-01T09:00:00.000Z',
+        clockOutAt: '2026-03-01T12:00:00.000Z',
+        note: null,
+        createdAt: now,
+        updatedAt: now,
+        breaks: []
+      },
+      {
+        id: 20,
+        date: '2026-03-01',
+        clockInAt: '2026-03-01T13:00:00.000Z',
+        clockOutAt: '2026-03-01T17:00:00.000Z',
+        note: null,
+        createdAt: now,
+        updatedAt: now,
+        breaks: []
+      }
+    ])
 
-      const result = await getDailySummaries('2026-03')
-      expect(result).toEqual([])
-    })
-
-    it('groups events by day and calculates summaries', async () => {
-      const { getDailySummaries } = await import('../service')
-      mockPrisma.attendanceLog.findMany.mockResolvedValue([
-        {
-          eventType: 'clock_in',
-          timestamp: '2026-03-01T09:00:00.000Z'
-        },
-        {
-          eventType: 'clock_out',
-          timestamp: '2026-03-01T17:00:00.000Z'
-        },
-        {
-          eventType: 'clock_in',
-          timestamp: '2026-03-02T10:00:00.000Z'
-        },
-        {
-          eventType: 'clock_out',
-          timestamp: '2026-03-02T15:00:00.000Z'
-        }
-      ])
-
-      const result = await getDailySummaries('2026-03')
-      expect(result).toHaveLength(2)
-      expect(result[0].date).toBe('2026-03-01')
-      expect(result[0].workedSeconds).toBe(8 * 3600)
-      expect(result[0].firstClockIn).toBe('2026-03-01T09:00:00.000Z')
-      expect(result[0].lastClockOut).toBe('2026-03-01T17:00:00.000Z')
-      expect(result[0].logCount).toBe(2)
-      expect(result[1].date).toBe('2026-03-02')
-      expect(result[1].workedSeconds).toBe(5 * 3600)
-    })
+    const result = await getDailySummaries('2026-03')
+    expect(result).toHaveLength(1)
+    expect(result[0].sessionCount).toBe(2)
+    expect(result[0].firstSessionId).toBe(10)
+    expect(result[0].lastSessionId).toBe(20)
+    expect(result[0].firstClockIn).toBe('2026-03-01T09:00:00.000Z')
+    expect(result[0].lastClockOut).toBe('2026-03-01T17:00:00.000Z')
   })
+})
 
-  describe('getMonthlySummary', () => {
-    it('aggregates daily summaries correctly', async () => {
-      const { getMonthlySummary } = await import('../service')
-      mockPrisma.attendanceLog.findMany.mockResolvedValue([
-        {
-          eventType: 'clock_in',
-          timestamp: '2026-03-01T09:00:00.000Z'
-        },
-        {
-          eventType: 'clock_out',
-          timestamp: '2026-03-01T17:00:00.000Z'
-        },
-        {
-          eventType: 'clock_in',
-          timestamp: '2026-03-02T10:00:00.000Z'
-        },
-        {
-          eventType: 'clock_out',
-          timestamp: '2026-03-02T15:00:00.000Z'
-        }
-      ])
+describe('getMonthlySummary', () => {
+  it('aggregates daily summaries correctly', async () => {
+    const now = new Date()
+    mockFindMany.mockResolvedValue([
+      {
+        id: 1,
+        date: '2026-03-01',
+        clockInAt: '2026-03-01T09:00:00.000Z',
+        clockOutAt: '2026-03-01T17:00:00.000Z',
+        note: null,
+        createdAt: now,
+        updatedAt: now,
+        breaks: []
+      },
+      {
+        id: 2,
+        date: '2026-03-02',
+        clockInAt: '2026-03-02T10:00:00.000Z',
+        clockOutAt: '2026-03-02T15:00:00.000Z',
+        note: null,
+        createdAt: now,
+        updatedAt: now,
+        breaks: []
+      }
+    ])
 
-      const result = await getMonthlySummary('2026-03')
-      expect(result.yearMonth).toBe('2026-03')
-      expect(result.totalWorkedSeconds).toBe(13 * 3600)
-      expect(result.workingDays).toBe(2)
-      expect(result.dailySummaries).toHaveLength(2)
-    })
+    const result = await getMonthlySummary('2026-03')
+    expect(result.yearMonth).toBe('2026-03')
+    expect(result.totalWorkedSeconds).toBe(13 * 3600)
+    expect(result.workingDays).toBe(2)
+    expect(result.dailySummaries).toHaveLength(2)
   })
 })

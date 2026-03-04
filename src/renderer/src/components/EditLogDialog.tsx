@@ -11,27 +11,14 @@ import { Button } from './ui/button'
 import { Label } from './ui/label'
 import { Input } from './ui/input'
 import { Textarea } from './ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
-import type { AttendanceEventType, AttendanceLog } from '../../../shared/attendance'
+import type { DailySummary, UpdateWorkSessionRequest } from '../../../shared/attendance'
 
-interface EditLogDialogProps {
+interface EditSessionDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  log: AttendanceLog | null // null = add mode
-  onSave: (data: {
-    id?: number
-    eventType: AttendanceEventType
-    timestamp: string
-    note?: string
-  }) => Promise<boolean>
+  summary: DailySummary | null
+  onSave: (data: UpdateWorkSessionRequest) => Promise<boolean>
   onDelete?: (id: number) => Promise<boolean>
-}
-
-const EVENT_TYPE_LABELS: Record<AttendanceEventType, string> = {
-  clock_in: '出勤',
-  clock_out: '退勤',
-  break_start: '休憩開始',
-  break_end: '休憩終了'
 }
 
 function toLocalDateTimeValue(isoString: string): string {
@@ -45,37 +32,39 @@ function fromLocalDateTimeValue(localValue: string): string {
   return new Date(localValue).toISOString()
 }
 
-export function EditLogDialog({ open, onOpenChange, log, onSave, onDelete }: EditLogDialogProps) {
-  const isEditMode = log !== null
-
-  const [eventType, setEventType] = useState<AttendanceEventType>('clock_in')
-  const [timestamp, setTimestamp] = useState('')
+export function EditSessionDialog({
+  open,
+  onOpenChange,
+  summary,
+  onSave,
+  onDelete
+}: EditSessionDialogProps) {
+  const [clockInAt, setClockInAt] = useState('')
+  const [clockOutAt, setClockOutAt] = useState('')
   const [note, setNote] = useState('')
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
-    if (open) {
-      if (log) {
-        setEventType(log.eventType)
-        setTimestamp(toLocalDateTimeValue(log.timestamp))
-        setNote(log.note ?? '')
-      } else {
-        setEventType('clock_in')
-        setTimestamp(toLocalDateTimeValue(new Date().toISOString()))
-        setNote('')
-      }
+    if (open && summary) {
+      setClockInAt(summary.firstClockIn ? toLocalDateTimeValue(summary.firstClockIn) : '')
+      setClockOutAt(summary.lastClockOut ? toLocalDateTimeValue(summary.lastClockOut) : '')
+      setNote('')
     }
-  }, [open, log])
+  }, [open, summary])
 
   const handleSave = async () => {
+    if (!summary) return
     setIsSaving(true)
     try {
-      const success = await onSave({
-        id: log?.id,
-        eventType,
-        timestamp: fromLocalDateTimeValue(timestamp),
+      const sessionId = summary.firstSessionId
+      if (sessionId == null) return
+      const data: UpdateWorkSessionRequest = {
+        id: sessionId,
+        clockInAt: clockInAt ? fromLocalDateTimeValue(clockInAt) : undefined,
+        clockOutAt: clockOutAt ? fromLocalDateTimeValue(clockOutAt) : undefined,
         note: note.trim() || undefined
-      })
+      }
+      const success = await onSave(data)
       if (success) {
         onOpenChange(false)
       }
@@ -85,10 +74,12 @@ export function EditLogDialog({ open, onOpenChange, log, onSave, onDelete }: Edi
   }
 
   const handleDelete = async () => {
-    if (!log || !onDelete) return
+    if (!summary || !onDelete) return
+    const sessionId = summary.firstSessionId
+    if (sessionId == null) return
     setIsSaving(true)
     try {
-      const success = await onDelete(log.id)
+      const success = await onDelete(sessionId)
       if (success) {
         onOpenChange(false)
       }
@@ -101,36 +92,35 @@ export function EditLogDialog({ open, onOpenChange, log, onSave, onDelete }: Edi
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEditMode ? 'ログを編集' : 'ログを追加'}</DialogTitle>
+          <DialogTitle>セッションを編集</DialogTitle>
           <DialogDescription>
-            {isEditMode ? '打刻記録を修正します。' : '過去の打刻記録を追加します。'}
+            勤務記録を修正します。
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="eventType">種別</Label>
-            <Select value={eventType} onValueChange={(v) => setEventType(v as AttendanceEventType)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(EVENT_TYPE_LABELS) as AttendanceEventType[]).map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {EVENT_TYPE_LABELS[type]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>日付</Label>
+            <div className="text-sm text-foreground">{summary?.date ?? '-'}</div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="timestamp">日時</Label>
+            <Label htmlFor="clockInAt">出勤時刻</Label>
             <Input
-              id="timestamp"
+              id="clockInAt"
               type="datetime-local"
-              value={timestamp}
-              onChange={(e) => setTimestamp(e.target.value)}
+              value={clockInAt}
+              onChange={(e) => setClockInAt(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="clockOutAt">退勤時刻</Label>
+            <Input
+              id="clockOutAt"
+              type="datetime-local"
+              value={clockOutAt}
+              onChange={(e) => setClockOutAt(e.target.value)}
             />
           </div>
 
@@ -150,7 +140,7 @@ export function EditLogDialog({ open, onOpenChange, log, onSave, onDelete }: Edi
         <DialogFooter>
           <div className="flex w-full justify-between">
             <div>
-              {isEditMode && onDelete && (
+              {onDelete && (
                 <Button variant="destructive" onClick={handleDelete} disabled={isSaving}>
                   削除
                 </Button>
@@ -160,8 +150,8 @@ export function EditLogDialog({ open, onOpenChange, log, onSave, onDelete }: Edi
               <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
                 キャンセル
               </Button>
-              <Button onClick={handleSave} disabled={isSaving || !timestamp}>
-                {isEditMode ? '保存' : '追加'}
+              <Button onClick={handleSave} disabled={isSaving || !clockInAt}>
+                保存
               </Button>
             </div>
           </div>
