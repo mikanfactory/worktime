@@ -1,4 +1,6 @@
-import { getPrismaClient } from "./client";
+import { getDb } from "./client";
+import { eq, isNull, like, asc, type InferSelectModel } from "drizzle-orm";
+import { workSessions, breakSessions } from "./schema";
 import type {
   WorkSession,
   BreakSession,
@@ -7,26 +9,16 @@ import type {
   MonthlySummary,
 } from "../shared/attendance";
 
-function toWorkSession(
-  row: {
-    id: number;
-    date: string;
-    clockInAt: string;
-    clockOutAt: string | null;
-    note: string | null;
-    createdAt: Date;
-    updatedAt: Date;
-    breaks?: {
-      id: number;
-      workSessionId: number;
-      startAt: string;
-      endAt: string | null;
-      note: string | null;
-      createdAt: Date;
-      updatedAt: Date;
-    }[];
-  },
-): WorkSession {
+type WorkSessionRow = InferSelectModel<typeof workSessions> & {
+  breaks?: InferSelectModel<typeof breakSessions>[];
+};
+
+type BreakSessionRow = Pick<
+  InferSelectModel<typeof breakSessions>,
+  "id" | "workSessionId" | "startAt" | "endAt" | "note"
+>;
+
+function toWorkSession(row: WorkSessionRow): WorkSession {
   return {
     id: row.id,
     date: row.date,
@@ -34,18 +26,12 @@ function toWorkSession(
     clockOutAt: row.clockOutAt ?? undefined,
     note: row.note ?? undefined,
     breaks: (row.breaks ?? []).map(toBreakSession),
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
-function toBreakSession(row: {
-  id: number;
-  workSessionId: number;
-  startAt: string;
-  endAt: string | null;
-  note: string | null;
-}): BreakSession {
+function toBreakSession(row: BreakSessionRow): BreakSession {
   return {
     id: row.id,
     workSessionId: row.workSessionId,
@@ -67,10 +53,10 @@ export async function createWorkSession(
   clockInAt: string,
   note?: string,
 ): Promise<WorkSession> {
-  const prisma = getPrismaClient();
+  const db = getDb();
 
-  const openSession = await prisma.workSession.findFirst({
-    where: { clockOutAt: null },
+  const openSession = await db.query.workSessions.findFirst({
+    where: isNull(workSessions.clockOutAt),
   });
   if (openSession) {
     throw new Error("An open work session already exists. Clock out first.");
@@ -78,26 +64,27 @@ export async function createWorkSession(
 
   const date = deriveDateFromIso(clockInAt);
 
-  const row = await prisma.workSession.create({
-    data: {
+  const row = db
+    .insert(workSessions)
+    .values({
       date,
       clockInAt,
       note: note ?? null,
-    },
-    include: { breaks: true },
-  });
+    })
+    .returning()
+    .get();
 
-  return toWorkSession(row);
+  return toWorkSession({ ...row, breaks: [] });
 }
 
 export async function endWorkSession(
   clockOutAt: string,
 ): Promise<WorkSession> {
-  const prisma = getPrismaClient();
+  const db = getDb();
 
-  const openSession = await prisma.workSession.findFirst({
-    where: { clockOutAt: null },
-    include: { breaks: true },
+  const openSession = await db.query.workSessions.findFirst({
+    where: isNull(workSessions.clockOutAt),
+    with: { breaks: true },
   });
   if (!openSession) {
     throw new Error("No open work session found.");
@@ -107,20 +94,27 @@ export async function endWorkSession(
     throw new Error("clockOutAt must be after clockInAt.");
   }
 
-  // Auto-close any open break sessions
   const openBreaks = openSession.breaks.filter((b) => b.endAt === null);
   for (const brk of openBreaks) {
-    await prisma.breakSession.update({
-      where: { id: brk.id },
-      data: { endAt: clockOutAt },
-    });
+    db.update(breakSessions)
+      .set({ endAt: clockOutAt, updatedAt: new Date().toISOString() })
+      .where(eq(breakSessions.id, brk.id))
+      .run();
   }
 
-  const row = await prisma.workSession.update({
-    where: { id: openSession.id },
-    data: { clockOutAt },
-    include: { breaks: true },
+  db.update(workSessions)
+    .set({ clockOutAt, updatedAt: new Date().toISOString() })
+    .where(eq(workSessions.id, openSession.id))
+    .run();
+
+  const row = await db.query.workSessions.findFirst({
+    where: eq(workSessions.id, openSession.id),
+    with: { breaks: true },
   });
+
+  if (!row) {
+    throw new Error("Failed to re-fetch updated work session.");
+  }
 
   return toWorkSession(row);
 }
@@ -129,11 +123,11 @@ export async function createBreakSession(
   startAt: string,
   note?: string,
 ): Promise<BreakSession> {
-  const prisma = getPrismaClient();
+  const db = getDb();
 
-  const openSession = await prisma.workSession.findFirst({
-    where: { clockOutAt: null },
-    include: { breaks: true },
+  const openSession = await db.query.workSessions.findFirst({
+    where: isNull(workSessions.clockOutAt),
+    with: { breaks: true },
   });
   if (!openSession) {
     throw new Error("No open work session found. Clock in first.");
@@ -148,13 +142,15 @@ export async function createBreakSession(
     throw new Error("Break start must be after clock-in time.");
   }
 
-  const row = await prisma.breakSession.create({
-    data: {
+  const row = db
+    .insert(breakSessions)
+    .values({
       workSessionId: openSession.id,
       startAt,
       note: note ?? null,
-    },
-  });
+    })
+    .returning()
+    .get();
 
   return toBreakSession(row);
 }
@@ -162,11 +158,11 @@ export async function createBreakSession(
 export async function endBreakSession(
   endAt: string,
 ): Promise<BreakSession> {
-  const prisma = getPrismaClient();
+  const db = getDb();
 
-  const openSession = await prisma.workSession.findFirst({
-    where: { clockOutAt: null },
-    include: { breaks: true },
+  const openSession = await db.query.workSessions.findFirst({
+    where: isNull(workSessions.clockOutAt),
+    with: { breaks: true },
   });
   if (!openSession) {
     throw new Error("No open work session found.");
@@ -181,10 +177,12 @@ export async function endBreakSession(
     throw new Error("Break end must be after break start.");
   }
 
-  const row = await prisma.breakSession.update({
-    where: { id: openBreak.id },
-    data: { endAt },
-  });
+  const row = db
+    .update(breakSessions)
+    .set({ endAt, updatedAt: new Date().toISOString() })
+    .where(eq(breakSessions.id, openBreak.id))
+    .returning()
+    .get();
 
   return toBreakSession(row);
 }
@@ -216,12 +214,12 @@ export function calculateWorkedSeconds(
 export async function getTodaySummary(
   dateStr: string,
 ): Promise<AttendanceSummary> {
-  const prisma = getPrismaClient();
+  const db = getDb();
 
-  const sessions = await prisma.workSession.findMany({
-    where: { date: dateStr },
-    include: { breaks: true },
-    orderBy: { clockInAt: "asc" },
+  const sessions = await db.query.workSessions.findMany({
+    where: eq(workSessions.date, dateStr),
+    with: { breaks: true },
+    orderBy: [asc(workSessions.clockInAt)],
   });
 
   if (sessions.length === 0) {
@@ -284,9 +282,11 @@ export async function updateWorkSession(
     note?: string;
   },
 ): Promise<WorkSession> {
-  const prisma = getPrismaClient();
+  const db = getDb();
 
-  const updateData: Record<string, string> = {};
+  const updateData: Partial<InferSelectModel<typeof workSessions>> = {
+    updatedAt: new Date().toISOString(),
+  };
   if (data.clockInAt !== undefined) {
     updateData.clockInAt = data.clockInAt;
     updateData.date = deriveDateFromIso(data.clockInAt);
@@ -294,18 +294,26 @@ export async function updateWorkSession(
   if (data.clockOutAt !== undefined) updateData.clockOutAt = data.clockOutAt;
   if (data.note !== undefined) updateData.note = data.note;
 
-  const row = await prisma.workSession.update({
-    where: { id },
-    data: updateData,
-    include: { breaks: true },
+  db.update(workSessions)
+    .set(updateData)
+    .where(eq(workSessions.id, id))
+    .run();
+
+  const row = await db.query.workSessions.findFirst({
+    where: eq(workSessions.id, id),
+    with: { breaks: true },
   });
+
+  if (!row) {
+    throw new Error(`Work session with id ${id} not found.`);
+  }
 
   return toWorkSession(row);
 }
 
 export async function deleteWorkSession(id: number): Promise<void> {
-  const prisma = getPrismaClient();
-  await prisma.workSession.delete({ where: { id } });
+  const db = getDb();
+  db.delete(workSessions).where(eq(workSessions.id, id)).run();
 }
 
 export async function createManualWorkSession(
@@ -317,31 +325,30 @@ export async function createManualWorkSession(
     throw new Error("clockOutAt must be after clockInAt.");
   }
 
-  const prisma = getPrismaClient();
+  const db = getDb();
 
-  const row = await prisma.workSession.create({
-    data: {
+  const row = db
+    .insert(workSessions)
+    .values({
       date,
       clockInAt,
       clockOutAt,
-    },
-    include: { breaks: true },
-  });
+    })
+    .returning()
+    .get();
 
-  return toWorkSession(row);
+  return toWorkSession({ ...row, breaks: [] });
 }
 
 export async function getDailySummaries(
   yearMonth: string,
 ): Promise<DailySummary[]> {
-  const prisma = getPrismaClient();
+  const db = getDb();
 
-  const sessions = await prisma.workSession.findMany({
-    where: {
-      date: { startsWith: yearMonth },
-    },
-    include: { breaks: true },
-    orderBy: { clockInAt: "asc" },
+  const sessions = await db.query.workSessions.findMany({
+    where: like(workSessions.date, `${yearMonth}%`),
+    with: { breaks: true },
+    orderBy: [asc(workSessions.clockInAt)],
   });
 
   const dayMap = new Map<

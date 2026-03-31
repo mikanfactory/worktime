@@ -1,25 +1,17 @@
-import { app } from "electron";
-import { PrismaClient } from "@prisma/client";
+import Database from "better-sqlite3";
 import * as fs from "fs";
 import * as path from "path";
+import { getDbPath } from "./client";
 
 interface PrismaMigrationRow {
   migration_name: string;
 }
 
 export async function runMigrations(): Promise<void> {
-  const dbPath = path.join(app.getPath("userData"), "beaver_log.db");
-
-  const prisma = new PrismaClient({
-    datasources: {
-      db: {
-        url: `file:${dbPath}`,
-      },
-    },
-  });
+  const sqlite = new Database(getDbPath());
 
   try {
-    await prisma.$executeRawUnsafe(`
+    sqlite.exec(`
       CREATE TABLE IF NOT EXISTS _prisma_migrations (
         id TEXT PRIMARY KEY,
         checksum TEXT NOT NULL,
@@ -43,9 +35,9 @@ export async function runMigrations(): Promise<void> {
       .filter((entry) => entry.isDirectory())
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    const appliedRows = await prisma.$queryRawUnsafe<PrismaMigrationRow[]>(
-      "SELECT migration_name FROM _prisma_migrations",
-    );
+    const appliedRows = sqlite
+      .prepare("SELECT migration_name FROM _prisma_migrations")
+      .all() as PrismaMigrationRow[];
     const appliedNames = new Set(appliedRows.map((row) => row.migration_name));
 
     for (const dir of migrationDirs) {
@@ -64,21 +56,20 @@ export async function runMigrations(): Promise<void> {
         .filter((s) => s.length > 0);
 
       for (const statement of statements) {
-        await prisma.$executeRawUnsafe(statement);
+        sqlite.exec(statement);
       }
 
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO _prisma_migrations (id, checksum, finished_at, migration_name, applied_steps_count)
+      sqlite
+        .prepare(
+          `INSERT INTO _prisma_migrations (id, checksum, finished_at, migration_name, applied_steps_count)
          VALUES (?, ?, datetime('now'), ?, 1)`,
-        id,
-        checksum,
-        dir.name,
-      );
+        )
+        .run(id, checksum, dir.name);
 
       console.log(`Applied migration: ${dir.name}`);
     }
   } finally {
-    await prisma.$disconnect();
+    sqlite.close();
   }
 }
 

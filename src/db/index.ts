@@ -1,13 +1,14 @@
-import { getPrismaClient, disconnectPrisma } from "./client";
+import { getSqlite, closeDb } from "./client";
 import { runMigrations } from "./migrate";
 
 export async function initializeDatabase(): Promise<void> {
   await runMigrations();
-  const prisma = getPrismaClient();
-  await prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL");
-  await prisma.$queryRawUnsafe("PRAGMA busy_timeout=5000");
+  const sqlite = getSqlite();
+  sqlite.pragma("journal_mode = WAL");
+  sqlite.pragma("busy_timeout = 5000");
+  sqlite.pragma("foreign_keys = ON");
 }
 
 export async function closeDatabase(): Promise<void> {
-  await disconnectPrisma();
+  closeDb();
 }
