@@ -25,11 +25,10 @@ BeaverLog is an Electron-based attendance management application. It features a 
 - `npm run build:win` - Build Windows app
 - `npm run build:linux` - Build Linux app
 
-### Database (Prisma)
+### Database (Drizzle)
 
-- `npm run db:generate` - Generate Prisma client
-- `npm run db:migrate:dev` - Create/apply dev migrations
-- `npm run db:studio` - Open Prisma Studio GUI
+- `npm run db:migrate:dev` - Generate migration SQL from schema changes
+- `npm run db:studio` - Open Drizzle Studio GUI
 
 ### Testing & Linting
 
@@ -46,7 +45,7 @@ BeaverLog is an Electron-based attendance management application. It features a 
 
 ### Key Components
 
-- **Database Layer** (`src/db/`): Prisma-based SQLite database with migration system for attendance log storage (`schema.prisma`, `client.ts`, `service.ts`, `migrate.ts`)
+- **Database Layer** (`src/db/`): Drizzle ORM with better-sqlite3 for SQLite database with migration system for attendance log storage (`schema.ts`, `client.ts`, `service.ts`, `migrate.ts`)
 - **Service Layer** (`src/main/services/`): `AttendanceService` (勤怠ロジック), `IpcHandlerService` (IPC通信), `WindowManagerService` (ウィンドウ管理)
 - **UI Components**: Modern component architecture using Radix UI primitives and Tailwind CSS
 

@@ -1,28 +1,38 @@
 import { app } from "electron";
-import { PrismaClient } from "@prisma/client";
+import { drizzle, BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import Database from "better-sqlite3";
 import * as path from "path";
+import * as schema from "./schema";
 
-let prismaClient: PrismaClient | null = null;
-
-export function getPrismaClient(): PrismaClient {
-  if (prismaClient) return prismaClient;
-
-  const dbPath = path.join(app.getPath("userData"), "beaver_log.db");
-
-  prismaClient = new PrismaClient({
-    datasources: {
-      db: {
-        url: `file:${dbPath}`,
-      },
-    },
-  });
-
-  return prismaClient;
+export function getDbPath(): string {
+  return path.join(app.getPath("userData"), "beaver_log.db");
 }
 
-export async function disconnectPrisma(): Promise<void> {
-  if (prismaClient) {
-    await prismaClient.$disconnect();
-    prismaClient = null;
+let sqliteDb: Database.Database | null = null;
+let drizzleDb: BetterSQLite3Database<typeof schema> | null = null;
+
+export function getDb(): BetterSQLite3Database<typeof schema> {
+  if (drizzleDb) return drizzleDb;
+
+  const sqlite = new Database(getDbPath());
+
+  sqliteDb = sqlite;
+  drizzleDb = drizzle(sqlite, { schema });
+
+  return drizzleDb;
+}
+
+export function getSqlite(): Database.Database {
+  if (!sqliteDb) {
+    getDb();
+  }
+  return sqliteDb!;
+}
+
+export function closeDb(): void {
+  if (sqliteDb) {
+    sqliteDb.close();
+    sqliteDb = null;
+    drizzleDb = null;
   }
 }

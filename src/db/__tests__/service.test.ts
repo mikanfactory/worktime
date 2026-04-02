@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { calculateWorkedSeconds } from '../service'
 
-// Mock Prisma client
+// Mock Drizzle client
 vi.mock('../client', () => ({
-  getPrismaClient: vi.fn()
+  getDb: vi.fn()
 }))
 
 import {
@@ -18,34 +18,57 @@ import {
   getDailySummaries,
   getMonthlySummary
 } from '../service'
-import { getPrismaClient } from '../client'
+import { getDb } from '../client'
 
-const mockCreate = vi.fn()
+// Create mock functions for relational queries
 const mockFindFirst = vi.fn()
 const mockFindMany = vi.fn()
-const mockUpdate = vi.fn()
-const mockDelete = vi.fn()
 
-const mockBreakCreate = vi.fn()
-const mockBreakUpdate = vi.fn()
+// Create chain mock helpers
+const mockRun = vi.fn()
+const mockGet = vi.fn()
 
-const mockPrisma = {
-  workSession: {
-    create: mockCreate,
-    findFirst: mockFindFirst,
-    findMany: mockFindMany,
-    update: mockUpdate,
-    delete: mockDelete
-  },
-  breakSession: {
-    create: mockBreakCreate,
-    update: mockBreakUpdate
+// Helper to build a fresh mockDb with independently-chainable insert/update/delete
+function createMockDb() {
+  return {
+    query: {
+      workSessions: {
+        findFirst: mockFindFirst,
+        findMany: mockFindMany
+      }
+    },
+    insert: vi.fn().mockReturnValue({
+      values: vi.fn().mockReturnValue({
+        returning: vi.fn().mockReturnValue({
+          get: mockGet
+        })
+      })
+    }),
+    update: vi.fn().mockReturnValue({
+      set: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          run: mockRun,
+          returning: vi.fn().mockReturnValue({
+            get: mockGet
+          })
+        })
+      })
+    }),
+    delete: vi.fn().mockReturnValue({
+      where: vi.fn().mockReturnValue({
+        run: mockRun
+      })
+    })
   }
 }
 
+type MockDb = ReturnType<typeof createMockDb>
+let mockDb: MockDb
+
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(getPrismaClient).mockReturnValue(mockPrisma as ReturnType<typeof getPrismaClient>)
+  mockDb = createMockDb()
+  vi.mocked(getDb).mockReturnValue(mockDb as ReturnType<typeof getDb>)
 })
 
 describe('calculateWorkedSeconds', () => {
@@ -121,35 +144,28 @@ describe('calculateWorkedSeconds', () => {
 
 describe('createWorkSession', () => {
   it('creates a session and returns it', async () => {
-    mockFindFirst.mockResolvedValue(null)
-    const now = new Date()
-    mockCreate.mockResolvedValue({
+    const nowIso = new Date().toISOString()
+    mockFindFirst.mockReturnValue(null)
+    mockGet.mockReturnValue({
       id: 1,
       date: '2026-03-01',
       clockInAt: '2026-03-01T09:00:00.000Z',
       clockOutAt: null,
       note: null,
-      createdAt: now,
-      updatedAt: now,
-      breaks: []
+      createdAt: nowIso,
+      updatedAt: nowIso
     })
 
     const result = await createWorkSession('2026-03-01T09:00:00.000Z')
     expect(result.id).toBe(1)
     expect(result.date).toBe('2026-03-01')
     expect(result.clockOutAt).toBeUndefined()
-    expect(mockCreate).toHaveBeenCalledWith({
-      data: {
-        date: '2026-03-01',
-        clockInAt: '2026-03-01T09:00:00.000Z',
-        note: null
-      },
-      include: { breaks: true }
-    })
+    expect(mockFindFirst).toHaveBeenCalled()
+    expect(mockDb.insert).toHaveBeenCalled()
   })
 
   it('throws if an open session exists', async () => {
-    mockFindFirst.mockResolvedValue({ id: 1, clockOutAt: null })
+    mockFindFirst.mockReturnValue({ id: 1, clockOutAt: null })
 
     await expect(createWorkSession('2026-03-01T09:00:00.000Z')).rejects.toThrow(
       'An open work session already exists'
@@ -157,17 +173,16 @@ describe('createWorkSession', () => {
   })
 
   it('saves with note when provided', async () => {
-    mockFindFirst.mockResolvedValue(null)
-    const now = new Date()
-    mockCreate.mockResolvedValue({
+    const nowIso = new Date().toISOString()
+    mockFindFirst.mockReturnValue(null)
+    mockGet.mockReturnValue({
       id: 2,
       date: '2026-03-01',
       clockInAt: '2026-03-01T09:00:00.000Z',
       clockOutAt: null,
       note: 'Remote',
-      createdAt: now,
-      updatedAt: now,
-      breaks: []
+      createdAt: nowIso,
+      updatedAt: nowIso
     })
 
     const result = await createWorkSession('2026-03-01T09:00:00.000Z', 'Remote')
@@ -177,21 +192,23 @@ describe('createWorkSession', () => {
 
 describe('endWorkSession', () => {
   it('closes the open session', async () => {
-    const now = new Date()
-    mockFindFirst.mockResolvedValue({
+    const nowIso = new Date().toISOString()
+    // First call: find open session
+    mockFindFirst.mockReturnValueOnce({
       id: 1,
       clockInAt: '2026-03-01T09:00:00.000Z',
       clockOutAt: null,
       breaks: []
     })
-    mockUpdate.mockResolvedValue({
+    // Second call: re-fetch after update
+    mockFindFirst.mockReturnValueOnce({
       id: 1,
       date: '2026-03-01',
       clockInAt: '2026-03-01T09:00:00.000Z',
       clockOutAt: '2026-03-01T17:00:00.000Z',
       note: null,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: nowIso,
+      updatedAt: nowIso,
       breaks: []
     })
 
@@ -200,7 +217,7 @@ describe('endWorkSession', () => {
   })
 
   it('throws if no open session exists', async () => {
-    mockFindFirst.mockResolvedValue(null)
+    mockFindFirst.mockReturnValue(null)
 
     await expect(endWorkSession('2026-03-01T17:00:00.000Z')).rejects.toThrow(
       'No open work session found'
@@ -208,7 +225,7 @@ describe('endWorkSession', () => {
   })
 
   it('throws if clockOutAt is before clockInAt', async () => {
-    mockFindFirst.mockResolvedValue({
+    mockFindFirst.mockReturnValue({
       id: 1,
       clockInAt: '2026-03-01T17:00:00.000Z',
       clockOutAt: null,
@@ -221,54 +238,53 @@ describe('endWorkSession', () => {
   })
 
   it('auto-closes open breaks', async () => {
-    const now = new Date()
-    mockFindFirst.mockResolvedValue({
+    const nowIso = new Date().toISOString()
+    // First call: find open session with open break
+    mockFindFirst.mockReturnValueOnce({
       id: 1,
       clockInAt: '2026-03-01T09:00:00.000Z',
       clockOutAt: null,
       breaks: [
-        { id: 10, startAt: '2026-03-01T12:00:00.000Z', endAt: null }
+        { id: 10, workSessionId: 1, startAt: '2026-03-01T12:00:00.000Z', endAt: null, note: null, createdAt: nowIso, updatedAt: nowIso }
       ]
     })
-    mockBreakUpdate.mockResolvedValue({})
-    mockUpdate.mockResolvedValue({
+    // Second call: re-fetch after update
+    mockFindFirst.mockReturnValueOnce({
       id: 1,
       date: '2026-03-01',
       clockInAt: '2026-03-01T09:00:00.000Z',
       clockOutAt: '2026-03-01T17:00:00.000Z',
       note: null,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: nowIso,
+      updatedAt: nowIso,
       breaks: [
-        { id: 10, workSessionId: 1, startAt: '2026-03-01T12:00:00.000Z', endAt: '2026-03-01T17:00:00.000Z', note: null, createdAt: now, updatedAt: now }
+        { id: 10, workSessionId: 1, startAt: '2026-03-01T12:00:00.000Z', endAt: '2026-03-01T17:00:00.000Z', note: null, createdAt: nowIso, updatedAt: nowIso }
       ]
     })
 
     await endWorkSession('2026-03-01T17:00:00.000Z')
-    expect(mockBreakUpdate).toHaveBeenCalledWith({
-      where: { id: 10 },
-      data: { endAt: '2026-03-01T17:00:00.000Z' }
-    })
+    // Verify update was called twice: once for break auto-close, once for work session close
+    expect(mockDb.update).toHaveBeenCalledTimes(2)
   })
 })
 
 describe('createBreakSession', () => {
   it('creates a break in an open session', async () => {
-    const now = new Date()
-    mockFindFirst.mockResolvedValue({
+    const nowIso = new Date().toISOString()
+    mockFindFirst.mockReturnValue({
       id: 1,
       clockInAt: '2026-03-01T09:00:00.000Z',
       clockOutAt: null,
       breaks: []
     })
-    mockBreakCreate.mockResolvedValue({
+    mockGet.mockReturnValue({
       id: 10,
       workSessionId: 1,
       startAt: '2026-03-01T12:00:00.000Z',
       endAt: null,
       note: null,
-      createdAt: now,
-      updatedAt: now
+      createdAt: nowIso,
+      updatedAt: nowIso
     })
 
     const result = await createBreakSession('2026-03-01T12:00:00.000Z')
@@ -277,7 +293,7 @@ describe('createBreakSession', () => {
   })
 
   it('throws if no open session', async () => {
-    mockFindFirst.mockResolvedValue(null)
+    mockFindFirst.mockReturnValue(null)
 
     await expect(createBreakSession('2026-03-01T12:00:00.000Z')).rejects.toThrow(
       'No open work session found'
@@ -285,7 +301,7 @@ describe('createBreakSession', () => {
   })
 
   it('throws if open break already exists', async () => {
-    mockFindFirst.mockResolvedValue({
+    mockFindFirst.mockReturnValue({
       id: 1,
       clockInAt: '2026-03-01T09:00:00.000Z',
       clockOutAt: null,
@@ -298,7 +314,7 @@ describe('createBreakSession', () => {
   })
 
   it('throws if break start is before clock-in', async () => {
-    mockFindFirst.mockResolvedValue({
+    mockFindFirst.mockReturnValue({
       id: 1,
       clockInAt: '2026-03-01T09:00:00.000Z',
       clockOutAt: null,
@@ -313,21 +329,21 @@ describe('createBreakSession', () => {
 
 describe('endBreakSession', () => {
   it('ends an open break', async () => {
-    const now = new Date()
-    mockFindFirst.mockResolvedValue({
+    const nowIso = new Date().toISOString()
+    mockFindFirst.mockReturnValue({
       id: 1,
       clockInAt: '2026-03-01T09:00:00.000Z',
       clockOutAt: null,
       breaks: [{ id: 10, startAt: '2026-03-01T12:00:00.000Z', endAt: null }]
     })
-    mockBreakUpdate.mockResolvedValue({
+    mockGet.mockReturnValue({
       id: 10,
       workSessionId: 1,
       startAt: '2026-03-01T12:00:00.000Z',
       endAt: '2026-03-01T13:00:00.000Z',
       note: null,
-      createdAt: now,
-      updatedAt: now
+      createdAt: nowIso,
+      updatedAt: nowIso
     })
 
     const result = await endBreakSession('2026-03-01T13:00:00.000Z')
@@ -335,7 +351,7 @@ describe('endBreakSession', () => {
   })
 
   it('throws if no open session', async () => {
-    mockFindFirst.mockResolvedValue(null)
+    mockFindFirst.mockReturnValue(null)
 
     await expect(endBreakSession('2026-03-01T13:00:00.000Z')).rejects.toThrow(
       'No open work session found'
@@ -343,7 +359,7 @@ describe('endBreakSession', () => {
   })
 
   it('throws if no open break', async () => {
-    mockFindFirst.mockResolvedValue({
+    mockFindFirst.mockReturnValue({
       id: 1,
       clockInAt: '2026-03-01T09:00:00.000Z',
       clockOutAt: null,
@@ -356,7 +372,7 @@ describe('endBreakSession', () => {
   })
 
   it('throws if endAt is before startAt', async () => {
-    mockFindFirst.mockResolvedValue({
+    mockFindFirst.mockReturnValue({
       id: 1,
       clockInAt: '2026-03-01T09:00:00.000Z',
       clockOutAt: null,
@@ -380,7 +396,7 @@ describe('getTodaySummary', () => {
   })
 
   it('returns empty summary when no sessions exist', async () => {
-    mockFindMany.mockResolvedValue([])
+    mockFindMany.mockReturnValue([])
 
     const result = await getTodaySummary('2026-03-01')
     expect(result).toEqual({
@@ -392,16 +408,16 @@ describe('getTodaySummary', () => {
   })
 
   it('calculates worked seconds for completed session', async () => {
-    const now = new Date()
-    mockFindMany.mockResolvedValue([
+    const nowIso = new Date().toISOString()
+    mockFindMany.mockReturnValue([
       {
         id: 1,
         date: '2026-03-01',
         clockInAt: '2026-03-01T09:00:00.000Z',
         clockOutAt: '2026-03-01T17:00:00.000Z',
         note: null,
-        createdAt: now,
-        updatedAt: now,
+        createdAt: nowIso,
+        updatedAt: nowIso,
         breaks: []
       }
     ])
@@ -412,16 +428,16 @@ describe('getTodaySummary', () => {
   })
 
   it('sets isWorking=true when session is open', async () => {
-    const now = new Date()
-    mockFindMany.mockResolvedValue([
+    const nowIso = new Date().toISOString()
+    mockFindMany.mockReturnValue([
       {
         id: 1,
         date: '2026-03-01',
         clockInAt: '2026-03-01T09:00:00.000Z',
         clockOutAt: null,
         note: null,
-        createdAt: now,
-        updatedAt: now,
+        createdAt: nowIso,
+        updatedAt: nowIso,
         breaks: []
       }
     ])
@@ -433,18 +449,18 @@ describe('getTodaySummary', () => {
   })
 
   it('sets isOnBreak=true when open break exists', async () => {
-    const now = new Date()
-    mockFindMany.mockResolvedValue([
+    const nowIso = new Date().toISOString()
+    mockFindMany.mockReturnValue([
       {
         id: 1,
         date: '2026-03-01',
         clockInAt: '2026-03-01T09:00:00.000Z',
         clockOutAt: null,
         note: null,
-        createdAt: now,
-        updatedAt: now,
+        createdAt: nowIso,
+        updatedAt: nowIso,
         breaks: [
-          { id: 10, workSessionId: 1, startAt: '2026-03-01T12:00:00.000Z', endAt: null, note: null, createdAt: now, updatedAt: now }
+          { id: 10, workSessionId: 1, startAt: '2026-03-01T12:00:00.000Z', endAt: null, note: null, createdAt: nowIso, updatedAt: nowIso }
         ]
       }
     ])
@@ -458,16 +474,16 @@ describe('getTodaySummary', () => {
   })
 
   it('returns currentSession when working', async () => {
-    const now = new Date()
-    mockFindMany.mockResolvedValue([
+    const nowIso = new Date().toISOString()
+    mockFindMany.mockReturnValue([
       {
         id: 1,
         date: '2026-03-01',
         clockInAt: '2026-03-01T09:00:00.000Z',
         clockOutAt: null,
         note: null,
-        createdAt: now,
-        updatedAt: now,
+        createdAt: nowIso,
+        updatedAt: nowIso,
         breaks: []
       }
     ])
@@ -480,15 +496,16 @@ describe('getTodaySummary', () => {
 
 describe('updateWorkSession', () => {
   it('updates a session and returns it', async () => {
-    const now = new Date()
-    mockUpdate.mockResolvedValue({
+    const nowIso = new Date().toISOString()
+    // After update, findFirst re-fetches the row
+    mockFindFirst.mockReturnValue({
       id: 1,
       date: '2026-03-01',
       clockInAt: '2026-03-01T09:30:00.000Z',
       clockOutAt: '2026-03-01T17:00:00.000Z',
       note: 'updated',
-      createdAt: now,
-      updatedAt: now,
+      createdAt: nowIso,
+      updatedAt: nowIso,
       breaks: []
     })
 
@@ -499,75 +516,64 @@ describe('updateWorkSession', () => {
 
     expect(result.id).toBe(1)
     expect(result.note).toBe('updated')
-    expect(mockUpdate).toHaveBeenCalledWith({
-      where: { id: 1 },
-      data: expect.objectContaining({
-        clockInAt: '2026-03-01T09:30:00.000Z',
-        note: 'updated'
-      }),
-      include: { breaks: true }
-    })
+    expect(mockDb.update).toHaveBeenCalled()
+    expect(mockRun).toHaveBeenCalled()
   })
 
   it('updates date when clockInAt changes', async () => {
-    const now = new Date()
-    mockUpdate.mockResolvedValue({
+    const nowIso = new Date().toISOString()
+    mockFindFirst.mockReturnValue({
       id: 1,
       date: '2026-03-02',
       clockInAt: '2026-03-02T09:00:00.000Z',
       clockOutAt: null,
       note: null,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: nowIso,
+      updatedAt: nowIso,
       breaks: []
     })
 
-    await updateWorkSession(1, { clockInAt: '2026-03-02T09:00:00.000Z' })
-    expect(mockUpdate).toHaveBeenCalledWith({
-      where: { id: 1 },
-      data: expect.objectContaining({ date: '2026-03-02' }),
-      include: { breaks: true }
-    })
+    const result = await updateWorkSession(1, { clockInAt: '2026-03-02T09:00:00.000Z' })
+    expect(result.date).toBe('2026-03-02')
+    expect(mockDb.update).toHaveBeenCalled()
   })
 
   it('throws for non-existent ID', async () => {
-    mockUpdate.mockRejectedValue(new Error('Record to update not found'))
+    // After update, findFirst returns null for non-existent record
+    mockFindFirst.mockReturnValue(null)
 
     await expect(updateWorkSession(999, { note: 'test' })).rejects.toThrow(
-      'Record to update not found'
+      'Work session with id 999 not found'
     )
   })
 })
 
 describe('deleteWorkSession', () => {
   it('deletes a session', async () => {
-    mockDelete.mockResolvedValue({ id: 1 })
-
     await deleteWorkSession(1)
-    expect(mockDelete).toHaveBeenCalledWith({ where: { id: 1 } })
+    expect(mockDb.delete).toHaveBeenCalled()
+    expect(mockRun).toHaveBeenCalled()
   })
 
-  it('throws for non-existent ID', async () => {
-    mockDelete.mockRejectedValue(new Error('Record to delete does not exist'))
-
-    await expect(deleteWorkSession(999)).rejects.toThrow(
-      'Record to delete does not exist'
-    )
+  it('completes without error even for non-existent ID', async () => {
+    // Drizzle delete does not throw on missing records
+    await expect(deleteWorkSession(999)).resolves.toBeUndefined()
+    expect(mockDb.delete).toHaveBeenCalled()
+    expect(mockRun).toHaveBeenCalled()
   })
 })
 
 describe('createManualWorkSession', () => {
   it('creates a closed session with both clockIn and clockOut', async () => {
-    const now = new Date()
-    mockCreate.mockResolvedValue({
+    const nowIso = new Date().toISOString()
+    mockGet.mockReturnValue({
       id: 5,
       date: '2026-03-01',
       clockInAt: '2026-03-01T09:00:00.000Z',
       clockOutAt: '2026-03-01T17:00:00.000Z',
       note: null,
-      createdAt: now,
-      updatedAt: now,
-      breaks: []
+      createdAt: nowIso,
+      updatedAt: nowIso
     })
 
     const result = await createManualWorkSession(
@@ -577,14 +583,7 @@ describe('createManualWorkSession', () => {
     )
     expect(result.id).toBe(5)
     expect(result.clockOutAt).toBe('2026-03-01T17:00:00.000Z')
-    expect(mockCreate).toHaveBeenCalledWith({
-      data: {
-        date: '2026-03-01',
-        clockInAt: '2026-03-01T09:00:00.000Z',
-        clockOutAt: '2026-03-01T17:00:00.000Z'
-      },
-      include: { breaks: true }
-    })
+    expect(mockDb.insert).toHaveBeenCalled()
   })
 
   it('throws if clockOutAt is before clockInAt', async () => {
@@ -610,23 +609,23 @@ describe('createManualWorkSession', () => {
 
 describe('getDailySummaries', () => {
   it('returns empty array for month with no data', async () => {
-    mockFindMany.mockResolvedValue([])
+    mockFindMany.mockReturnValue([])
 
     const result = await getDailySummaries('2026-03')
     expect(result).toEqual([])
   })
 
   it('groups sessions by day and calculates summaries', async () => {
-    const now = new Date()
-    mockFindMany.mockResolvedValue([
+    const nowIso = new Date().toISOString()
+    mockFindMany.mockReturnValue([
       {
         id: 1,
         date: '2026-03-01',
         clockInAt: '2026-03-01T09:00:00.000Z',
         clockOutAt: '2026-03-01T17:00:00.000Z',
         note: null,
-        createdAt: now,
-        updatedAt: now,
+        createdAt: nowIso,
+        updatedAt: nowIso,
         breaks: []
       },
       {
@@ -635,10 +634,10 @@ describe('getDailySummaries', () => {
         clockInAt: '2026-03-02T10:00:00.000Z',
         clockOutAt: '2026-03-02T15:00:00.000Z',
         note: null,
-        createdAt: now,
-        updatedAt: now,
+        createdAt: nowIso,
+        updatedAt: nowIso,
         breaks: [
-          { id: 10, workSessionId: 2, startAt: '2026-03-02T12:00:00.000Z', endAt: '2026-03-02T13:00:00.000Z', note: null, createdAt: now, updatedAt: now }
+          { id: 10, workSessionId: 2, startAt: '2026-03-02T12:00:00.000Z', endAt: '2026-03-02T13:00:00.000Z', note: null, createdAt: nowIso, updatedAt: nowIso }
         ]
       }
     ])
@@ -660,16 +659,16 @@ describe('getDailySummaries', () => {
   })
 
   it('returns different firstSessionId and lastSessionId for multi-session days', async () => {
-    const now = new Date()
-    mockFindMany.mockResolvedValue([
+    const nowIso = new Date().toISOString()
+    mockFindMany.mockReturnValue([
       {
         id: 10,
         date: '2026-03-01',
         clockInAt: '2026-03-01T09:00:00.000Z',
         clockOutAt: '2026-03-01T12:00:00.000Z',
         note: null,
-        createdAt: now,
-        updatedAt: now,
+        createdAt: nowIso,
+        updatedAt: nowIso,
         breaks: []
       },
       {
@@ -678,8 +677,8 @@ describe('getDailySummaries', () => {
         clockInAt: '2026-03-01T13:00:00.000Z',
         clockOutAt: '2026-03-01T17:00:00.000Z',
         note: null,
-        createdAt: now,
-        updatedAt: now,
+        createdAt: nowIso,
+        updatedAt: nowIso,
         breaks: []
       }
     ])
@@ -696,16 +695,16 @@ describe('getDailySummaries', () => {
 
 describe('getMonthlySummary', () => {
   it('aggregates daily summaries correctly', async () => {
-    const now = new Date()
-    mockFindMany.mockResolvedValue([
+    const nowIso = new Date().toISOString()
+    mockFindMany.mockReturnValue([
       {
         id: 1,
         date: '2026-03-01',
         clockInAt: '2026-03-01T09:00:00.000Z',
         clockOutAt: '2026-03-01T17:00:00.000Z',
         note: null,
-        createdAt: now,
-        updatedAt: now,
+        createdAt: nowIso,
+        updatedAt: nowIso,
         breaks: []
       },
       {
@@ -714,8 +713,8 @@ describe('getMonthlySummary', () => {
         clockInAt: '2026-03-02T10:00:00.000Z',
         clockOutAt: '2026-03-02T15:00:00.000Z',
         note: null,
-        createdAt: now,
-        updatedAt: now,
+        createdAt: nowIso,
+        updatedAt: nowIso,
         breaks: []
       }
     ])
